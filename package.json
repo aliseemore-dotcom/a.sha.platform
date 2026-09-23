@@ -1,0 +1,12 @@
+{
+  "name": "a-sha-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Рабочее пространство организатора свадеб — экран 01 «Мои мероприятия»",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  }
+}

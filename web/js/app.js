@@ -1,0 +1,115 @@
+// Оболочка приложения: сессия, шапка продукта, маршрутизация по History API.
+
+import { h, clear } from './dom.js';
+import { api } from './api.js';
+import { renderLogin } from './views/login.js';
+import { renderEvents } from './views/events.js';
+import { renderOverview } from './views/overview.js';
+
+const root = document.getElementById('root');
+let cleanup = null;
+let session = null;
+
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+function match(pathname) {
+  if (pathname === '/login') return { view: 'login' };
+  if (pathname === '/events') return { view: 'events' };
+  let m = pathname.match(/^\/events\/([A-Za-z0-9_-]+)\/overview$/);
+  if (m) return { view: 'overview', params: { eventId: m[1] } };
+  m = pathname.match(/^\/events\/([A-Za-z0-9_-]+)\/tasks\/([A-Za-z0-9_-]+)$/);
+  if (m) return { redirect: `/events/${m[1]}/overview?focus=attention&task=${m[2]}` };
+  if (pathname === '/') return { redirect: '/events' };
+  return { view: 'notFound' };
+}
+
+export function navigate(url, { replace = false, state = null } = {}) {
+  // Запоминаем прокрутку текущей страницы, чтобы восстановить её при возврате назад.
+  history.replaceState({ ...(history.state ?? {}), scrollY: window.scrollY }, '');
+  if (replace) history.replaceState(state, '', url);
+  else history.pushState(state, '', url);
+  render();
+}
+
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[href]');
+  if (!a || a.target || a.hasAttribute('download') || e.defaultPrevented) return;
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const url = new URL(a.href, location.href);
+  if (url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
+  e.preventDefault();
+  if (url.pathname + url.search !== location.pathname + location.search) navigate(url.pathname + url.search);
+});
+
+window.addEventListener('popstate', () => render());
+
+function header() {
+  const { user, workspace, demo } = session;
+  return h('header', { class: 'app-header' },
+    h('div', { class: 'app-header__inner container' },
+      h('div', { class: 'app-header__place' },
+        h('span', { class: 'app-header__workspace' }, workspace.name),
+        demo ? h('span', { class: 'stand-badge', title: 'Данные вымышленные, вход без пароля' }, 'Тестовый стенд') : null,
+      ),
+      h('nav', { class: 'app-header__user', 'aria-label': 'Пользователь' },
+        h('span', { class: 'app-header__name' }, user.name),
+        h('button', {
+          type: 'button', class: 'btn btn--ghost btn--small',
+          onclick: async () => {
+            await api.logout().catch(() => {});
+            session = null;
+            location.assign('/login');
+          },
+        }, 'Выйти'),
+      ),
+    ),
+  );
+}
+
+function notFound() {
+  return h('main', { id: 'main', class: 'container page' },
+    h('h1', { class: 'page-title' }, 'Страница не найдена'),
+    h('p', {}, h('a', { href: '/events', class: 'link' }, 'К списку мероприятий')),
+  );
+}
+
+async function render() {
+  cleanup?.();
+  cleanup = null;
+  const route = match(location.pathname);
+  if (route.redirect) return navigate(route.redirect, { replace: true });
+
+  if (route.view === 'login') {
+    clear(root);
+    root.removeAttribute('aria-busy');
+    cleanup = renderLogin(root, { navigate });
+    return;
+  }
+
+  if (!session) {
+    try {
+      session = await api.session();
+    } catch {
+      location.assign(`/login?returnTo=${encodeURIComponent(location.pathname + location.search)}`);
+      return;
+    }
+  }
+
+  clear(root);
+  root.removeAttribute('aria-busy');
+  const slot = h('div', { class: 'app-body' });
+  root.append(header(), slot);
+
+  const ctx = {
+    session,
+    navigate,
+    params: route.params ?? {},
+    query: new URLSearchParams(location.search),
+    restoreScroll: history.state?.scrollY ?? null,
+  };
+  if (route.view === 'events') cleanup = renderEvents(slot, ctx);
+  else if (route.view === 'overview') cleanup = renderOverview(slot, ctx);
+  else slot.append(notFound());
+}
+
+render();
