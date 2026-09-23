@@ -197,21 +197,27 @@ a { color: inherit; }
 .banner--info { background: var(--sky-tint); color: var(--sky-ink); }
 
 /* ---------- метки статуса: форма + слово ---------- */
+/* Компактная геометрия для плотных строк (часть II §1): статус не должен спорить по весу
+   с названием задачи. Заголовок строки остаётся крупнее и заметнее самого бейджа. */
 
 .chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 3px 10px;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px;
   border-radius: var(--radius-pill);
-  font-size: var(--fs-caption); font-weight: 600; line-height: 1.35;
-  white-space: nowrap;
+  font-size: 11px; line-height: 14px; font-weight: 600;
+  white-space: normal;
   max-width: 100%;
 }
+@media (min-width: 768px) { .chip { font-size: 12px; line-height: 16px; } }
 .chip > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 .chip--planned { background: var(--surface-muted); color: var(--ink-secondary); }
 .chip--progress { background: var(--sky-tint); color: var(--sky-ink); }
 .chip--blocked { background: var(--status-blocked-tint); color: var(--status-blocked); }
 .chip--done { background: var(--olive-tint); color: var(--olive-ink); }
 .chip--soon { background: var(--status-amber-tint); color: var(--status-amber-ink); }
+
+/* Чуть крупнее — для одиночного статуса в детальной панели задачи */
+.chip--detail { padding: 4px 8px; font-size: 12px; line-height: 16px; }
 
 .shape { flex: none; display: inline-block; width: 10px; height: 10px; position: relative; }
 .shape--planned { border: 1.5px solid currentColor; border-radius: 50%; }
@@ -235,11 +241,11 @@ a { color: inherit; }
   border-bottom: 10px solid currentColor;
 }
 
-/* ---------- «Требует внимания»: тёмная зона, локальный акцент ---------- */
+/* ---------- «Требует внимания»: мягкий голубой, локальный акцент (часть II §2) ---------- */
 
 .attention {
-  background: var(--dark-panel);
-  color: var(--ink-on-dark);
+  background: linear-gradient(180deg, var(--attention-surface), var(--attention-surface-subtle));
+  color: var(--attention-text);
   border-radius: var(--radius-card);
   padding: var(--space-3);
   margin-bottom: var(--space-4);
@@ -251,7 +257,7 @@ a { color: inherit; }
   margin-bottom: var(--space-2);
 }
 .attention__list { display: grid; }
-.attention-row + .attention-row { border-top: 1px solid var(--line-on-dark); }
+.attention-row + .attention-row { border-top: 1px solid var(--attention-divider); }
 .attention-row__link {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -263,16 +269,17 @@ a { color: inherit; }
   margin-inline: calc(-1 * var(--space-1));
   border-radius: var(--radius-field);
   text-decoration: none;
+  color: inherit;
 }
-.attention-row__link:hover { background: rgba(247, 247, 247, 0.06); }
-.attention-row__link:focus-visible { outline-color: var(--ink-on-dark); }
+.attention-row__link:hover { background: var(--attention-hover); }
+.attention-row__link:focus-visible { outline-color: var(--attention-accent); }
 .attention-row__link .chip { grid-area: chip; justify-self: start; }
 .attention-row__title {
   grid-area: title; font-weight: 600; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.attention-row__meta { grid-area: meta; font-size: var(--fs-caption); color: var(--ink-on-dark-secondary); overflow-wrap: anywhere; }
-.attention-row__arrow { grid-area: arrow; flex: none; font-size: 18px; color: var(--ink-on-dark-secondary); }
+.attention-row__meta { grid-area: meta; font-size: var(--fs-caption); color: var(--attention-text-secondary); overflow-wrap: anywhere; }
+.attention-row__arrow { grid-area: arrow; flex: none; font-size: 18px; color: var(--attention-text-secondary); }
 
 @media (min-width: 900px) {
   .attention-row__link {
@@ -281,7 +288,7 @@ a { color: inherit; }
   }
 }
 .attention__controls { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
-.attention__error { margin-top: var(--space-1); color: var(--ink-on-dark); }
+.attention__error { margin-top: var(--space-1); color: var(--status-blocked); }
 @media (max-width: 767px) {
   /* Три строки и кнопка раскрытия — блок не занимает весь первый экран телефона */
   .attention { padding: var(--space-2) var(--space-2) var(--space-2); margin-bottom: var(--space-3); }
@@ -290,7 +297,15 @@ a { color: inherit; }
   .attention__controls .btn { flex: 1; }
 }
 
-/* Спокойное состояние: сигналов нет — компактная светлая строка, а не пустая тёмная панель */
+/* Кнопки на голубой поверхности: контурные, с тем же акцентом */
+.btn--on-blue {
+  background: transparent; color: var(--attention-accent); border-color: var(--attention-accent);
+}
+.btn--on-blue:hover:not(:disabled) { background: rgba(50, 122, 166, 0.1); }
+.btn--on-blue:focus-visible { outline-color: var(--attention-accent); }
+.btn--on-blue:disabled { color: var(--attention-text-secondary); border-color: var(--attention-divider); }
+
+/* Спокойное состояние: сигналов нет — компактная светлая строка, а не пустая голубая панель */
 .attention-calm {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-2);
   padding: var(--space-2) var(--space-3);
@@ -307,7 +322,7 @@ a { color: inherit; }
   font-weight: 600; color: var(--ink-primary); text-underline-offset: 3px;
 }
 .attention--skeleton { display: grid; gap: var(--space-2); }
-.skeleton--on-dark { background: rgba(247, 247, 247, 0.12); }
+.attention--skeleton .skeleton { background: rgba(24, 48, 68, 0.1); }
 .skeleton--heading { height: 28px; width: 45%; }
 .skeleton--row { height: 44px; }
 
@@ -397,11 +412,14 @@ a { color: inherit; }
 .card__inner {
   display: flex; flex-direction: column;
   background: var(--surface-white);
-  border: 1px solid var(--line-soft);
+  border: 1px solid var(--card-border);
   border-radius: var(--radius-card);
   overflow: hidden;
+  transition: box-shadow .15s, border-color .15s;
 }
-.card--urgent .card__inner { border-color: var(--status-blocked); }
+.card__inner:hover { border-color: var(--line-strong); box-shadow: var(--shadow-float); }
+/* Срочность видна из плашки «Срочно · N» внутри карточки (часть II §3) — сплошная красная
+   рамка вокруг всей карточки повторялась на каждой карточке сетки и делала её тревожной. */
 
 .card__top {
   position: relative;
@@ -458,7 +476,7 @@ a { color: inherit; }
   margin-top: var(--space-1);
   padding: var(--space-2);
   border-radius: var(--radius-button);
-  background: var(--status-blocked-tint);
+  background: var(--urgent-tint-soft);
 }
 .card__urgent-label {
   display: flex; align-items: center; gap: 6px;
@@ -608,6 +626,28 @@ a { color: inherit; }
   margin-bottom: var(--space-4);
 }
 .overview-head .overline { margin-bottom: var(--space-1); }
+
+/* margin-left: auto держит меню у правого края даже когда .overview-head переносит его
+   на отдельную строку (единственный элемент строки при flex-wrap иначе прижимается к началу) */
+.project-menu { position: relative; flex: none; margin-left: auto; }
+.project-menu__toggle { font-size: 20px; letter-spacing: 1px; }
+.project-menu__panel {
+  position: absolute; right: 0; top: calc(100% + var(--space-1)); z-index: 20;
+  min-width: 220px;
+  padding: var(--space-1);
+  background: var(--surface-white);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-button);
+  box-shadow: var(--shadow-float);
+}
+.project-menu__panel[hidden] { display: none; }
+.project-menu__item {
+  display: block; width: 100%; text-align: left;
+  min-height: 44px; padding: 0 var(--space-2);
+  border: 0; border-radius: var(--radius-field);
+  background: transparent; font-weight: 500; cursor: pointer;
+}
+.project-menu__item:hover { background: var(--surface-muted); }
 .zones { display: grid; gap: var(--space-3); margin-bottom: var(--space-3); }
 @media (min-width: 1024px) { .zones { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
 .zone {

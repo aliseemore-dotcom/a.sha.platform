@@ -17,7 +17,7 @@ const STATUS_WORD = {
 };
 
 const CLOSED = new Set(['done', 'cancelled']);
-const KIND_TONE = { overdue: 'blocked', blocked: 'blocked', due_today: 'soon', follow_up_due: 'soon' };
+const KIND_TONE = { overdue: 'blocked', blocked: 'blocked', due_today: 'soon' };
 
 function dueText(task, timeZone) {
   if (task.dueAt) return dateTimeIn(Date.parse(task.dueAt), timeZone);
@@ -112,15 +112,55 @@ export function renderOverview(slot, { params, session }) {
       h('p', { class: 'overline' }, 'Задача'),
       h('h2', { class: 'task-panel__title', id: 'task-title' }, task.title),
       h('div', { class: 'task-panel__chips' },
-        statusChip(tone, word),
-        signalLabel && signal.kind !== 'blocked' ? statusChip(KIND_TONE[signal.kind], signalLabel) : null),
+        statusChip(tone, word, { size: 'detail' }),
+        signalLabel && signal.kind !== 'blocked'
+          ? statusChip(KIND_TONE[signal.kind], signalLabel, { size: 'detail' })
+          : null),
       h('dl', { class: 'task-panel__facts' },
         rows.map(([k, v]) => h('div', { class: 'task-panel__fact' }, h('dt', {}, k), h('dd', {}, v)))),
       status,
       h('div', { class: 'task-panel__actions' },
         completeBtn,
-        h('a', { class: 'btn btn--secondary', href: overviewUrl }, 'Закрыть задачу')),
+        h('a', { class: 'btn btn--secondary', href: overviewUrl }, 'Вернуться к проекту')),
     );
+  }
+
+  // Один обработчик клика вне меню на весь экран, а не по одному на каждый render/меню.
+  let closeProjectMenu = () => {};
+  const onDocumentClick = (e) => closeProjectMenu(e.target);
+  document.addEventListener('click', onDocumentClick, { capture: true });
+
+  /** Меню действий проекта — сейчас только архивирование/восстановление. */
+  function projectMenu(event) {
+    const archived = event.lifecycle === 'archived';
+    const menuId = 'project-menu';
+    const item = h('button', {
+      type: 'button', role: 'menuitem', class: 'project-menu__item',
+      onclick: (e) => {
+        const b = e.currentTarget;
+        if (!archived && !window.confirm(`Переместить «${event.title}» в архив?`)) return;
+        setOpen(false);
+        lifecycleAction(archived ? 'restore' : 'archive', b);
+      },
+    }, archived ? 'Вернуть в активные' : 'Переместить в архив');
+    const panel = h('div', { class: 'project-menu__panel', id: menuId, role: 'menu', hidden: true }, item);
+    const toggle = h('button', {
+      type: 'button', class: 'icon-btn project-menu__toggle', 'aria-haspopup': 'true',
+      'aria-expanded': 'false', 'aria-controls': menuId, 'aria-label': 'Действия с проектом',
+    }, '⋮');
+    const wrap = h('div', { class: 'project-menu' }, toggle, panel);
+    function setOpen(open) {
+      panel.hidden = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+      if (open) item.focus();
+    }
+    toggle.addEventListener('click', () => setOpen(panel.hidden));
+    wrap.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !panel.hidden) { setOpen(false); toggle.focus(); }
+    });
+    wrap.addEventListener('focusout', (e) => { if (!wrap.contains(e.relatedTarget)) setOpen(false); });
+    closeProjectMenu = (target) => { if (!wrap.contains(target)) setOpen(false); };
+    return wrap;
   }
 
   function render({ event, attention, tasks, timeZone }) {
@@ -166,16 +206,7 @@ export function renderOverview(slot, { params, session }) {
     ].filter(Boolean).join(' · ');
 
     const archived = event.lifecycle === 'archived';
-    const lifecycleBtn = canArchive
-      ? h('button', {
-        type: 'button', class: 'btn btn--secondary',
-        onclick: (e) => {
-          const b = e.currentTarget;
-          if (!archived && !window.confirm(`Переместить «${event.title}» в архив?`)) return;
-          lifecycleAction(archived ? 'restore' : 'archive', b);
-        },
-      }, archived ? 'Вернуть в активные' : 'Переместить в архив')
-      : null;
+    const menu = canArchive ? projectMenu(event) : null;
 
     const attentionSection = h('section', { class: 'zone', id: 'attention', 'aria-labelledby': 'zone-attention' },
       h('h2', { class: 'zone__title', id: 'zone-attention' }, `Срочно решить${attention.length ? ` · ${attention.length}` : ''}`),
@@ -205,7 +236,9 @@ export function renderOverview(slot, { params, session }) {
         : h('p', { class: 'muted' }, 'Задач пока нет'),
     );
 
-    main.append(
+    // main.append — нативный Element.append, а не наш h()-хелпер: null превратился бы в текст
+    // "null" вместо того, чтобы просто отсутствовать, поэтому пустые слоты отфильтровываются явно.
+    main.append(...[
       back(),
       ...banners,
       h('section', { class: 'overview-head' },
@@ -214,17 +247,20 @@ export function renderOverview(slot, { params, session }) {
           h('h1', { class: 'page-title' }, event.title),
           h('p', { class: 'page-subtitle' }, meta),
         ),
-        lifecycleBtn,
+        menu,
       ),
       taskSection,
       h('div', { class: 'zones' }, attentionSection, planSection),
       h('p', { class: 'caption muted' }, 'Полный обзор проекта — следующий этап.'),
-    );
+    ].filter(Boolean));
 
     if (taskSection && firstRender) taskSection.focus();
     firstRender = false;
   }
 
   load();
-  return () => controller.abort();
+  return () => {
+    controller.abort();
+    document.removeEventListener('click', onDocumentClick, { capture: true });
+  };
 }

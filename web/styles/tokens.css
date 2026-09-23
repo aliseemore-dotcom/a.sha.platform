@@ -92,6 +92,21 @@
   --status-amber-ink: #8A5A00;
   --status-amber-tint: #FBF0D9;
 
+  /* Блок «Требует внимания» — итерация 3, часть II §2: мягкий голубой вместо тёмной заливки.
+     Значения — прототип для сравнения на реальных экранах, ближайшие того же характера к
+     токенам брендбука (sky / sky-ink), не новая независимая палитра. */
+  --attention-surface: #DDECF7;
+  --attention-surface-subtle: #EAF4FA;
+  --attention-text: #183044;
+  --attention-text-secondary: rgba(24, 48, 68, 0.64);
+  --attention-divider: rgba(34, 77, 111, 0.16);
+  --attention-hover: rgba(255, 255, 255, 0.44);
+  --attention-accent: #327AA6;
+
+  /* Карточка проекта — тонкая малоконтрастная граница вместо жёсткой тени (часть II §3) */
+  --card-border: #E4E8EA;
+  --urgent-tint-soft: #FCF2F1;
+
   /* Типографика: Involve, запасной стек по брендбуку */
   --font: Involve, Arial, sans-serif;
   --fs-date-xl: clamp(48px, 5vw, 64px);

@@ -4,12 +4,15 @@
 import { localDate, startOfLocalDay, addDays } from './time.js';
 
 /**
- * Причина строки внимания определяется по приоритету blocked → overdue → due_today → follow_up_due:
+ * Причина строки внимания определяется по приоритету blocked → overdue → due_today:
  * заблокированная и одновременно просроченная задача — одна строка «Заблокировано».
- * Сортировка идёт группами: заблокированные и просроченные вместе выше «Сегодня»,
- * «Нужно напомнить» (ожидание ответа, сигнал из спецификации экрана 01) — последней группой.
+ * Сортировка идёт группами: заблокированные и просроченные вместе выше «Сегодня».
+ *
+ * «Нужно напомнить» (ожидание ответа) сознательно не считается сигналом внимания: у него ещё
+ * нет подтверждённого источника данных и правила наступления/снятия напоминания (итерация 3,
+ * уточнение). Статус `waiting` при этом продолжает существовать и виден в списке задач проекта.
  */
-export const ATTENTION_GROUP = { blocked: 1, overdue: 1, due_today: 2, follow_up_due: 3 };
+export const ATTENTION_GROUP = { blocked: 1, overdue: 1, due_today: 2 };
 
 const CLOSED = new Set(['done', 'cancelled']);
 
@@ -27,28 +30,18 @@ export function overdueFrom(task, timeZone) {
   return null;
 }
 
-function followUpDate(task, timeZone) {
-  if (!task.followUpAt) return null;
-  return task.followUpAt.length > 10 ? localDate(Date.parse(task.followUpAt), timeZone) : task.followUpAt;
-}
-
 /** Вид внимания задачи или null. Одна задача — один вид, с наивысшим приоритетом. */
 export function classifyTask(task, now, timeZone) {
   if (CLOSED.has(task.status)) return null;
   // Блокировка — явный статус задачи, из просрочки не выводится.
   if (task.status === 'blocked') return 'blocked';
 
-  const today = localDate(now, timeZone);
   const overdueAt = overdueFrom(task, timeZone);
   if (overdueAt !== null && now >= overdueAt) return 'overdue';
 
   const dueDay = task.dueAt ? localDate(Date.parse(task.dueAt), timeZone) : task.dueDate;
-  if (dueDay && dueDay === today) return 'due_today';
+  if (dueDay && dueDay === localDate(now, timeZone)) return 'due_today';
 
-  if (task.status === 'waiting') {
-    const follow = followUpDate(task, timeZone);
-    if (follow && follow <= today) return 'follow_up_due';
-  }
   return null;
 }
 
@@ -95,7 +88,6 @@ export function buildAttention({ events, tasksByEvent, usersById, now, timeZone 
         kind,
         dueAt: task.dueAt ?? null,
         dueDate: task.dueDate ?? null,
-        followUpAt: task.followUpAt ?? null,
         ownerName: usersById.get(task.assigneeId)?.name ?? null,
         targetUrl: taskTargetUrl(task),
         sortDue: overdueFrom(task, timeZone),

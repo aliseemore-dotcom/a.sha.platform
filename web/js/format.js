@@ -99,11 +99,6 @@ export function attentionLabel(item, timeZone, now = Date.now()) {
         return { label: `Сегодня · ${timeIn(due, timeZone)}`, detail: `Срок: ${dateTimeIn(due, timeZone)}` };
       }
       return { label: 'Сегодня', detail: `Срок: ${fullDate(item.dueDate)}, до конца дня` };
-    case 'follow_up_due':
-      return {
-        label: 'Нужно напомнить',
-        detail: item.followUpAt ? `Повторный контакт: ${fullDate(item.followUpAt.slice(0, 10))}` : null,
-      };
     default:
       return { label: '', detail: null };
   }

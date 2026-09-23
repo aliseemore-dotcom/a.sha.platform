@@ -5,11 +5,16 @@ import {
   attentionLabel, dayNumber, monthYear, fullDate, relativeDay, pluralize, projectStage,
 } from '../format.js';
 
-const KIND_TONE = { overdue: 'blocked', blocked: 'blocked', due_today: 'soon', follow_up_due: 'soon' };
+const KIND_TONE = { overdue: 'blocked', blocked: 'blocked', due_today: 'soon' };
 
-/** Метка статуса: слово + форма; цвет вторичен (брендбук, «Статусы, метки, дата»). */
-export function statusChip(tone, text, attrs = {}) {
-  return h('span', { class: `chip chip--${tone}`, ...attrs },
+/**
+ * Метка статуса: слово + форма; цвет вторичен (брендбук, «Статусы, метки, дата»).
+ * `size: 'detail'` — чуть крупнее вариант для одиночного статуса в детальной панели задачи
+ * (часть II §1); в плотных списках используется размер по умолчанию.
+ */
+export function statusChip(tone, text, { size, ...attrs } = {}) {
+  const cls = `chip chip--${tone}${size === 'detail' ? ' chip--detail' : ''}`;
+  return h('span', { class: cls, ...attrs },
     h('span', { class: `shape shape--${tone}`, 'aria-hidden': 'true' }),
     h('span', {}, text),
   );
@@ -131,7 +136,7 @@ export function cardSkeleton() {
 
 export function attentionSkeleton(rows) {
   return h('section', { class: 'attention attention--skeleton', 'aria-hidden': 'true' },
-    h('div', { class: 'skeleton skeleton--on-dark skeleton--heading' }),
-    Array.from({ length: rows }, () => h('div', { class: 'skeleton skeleton--on-dark skeleton--row' })),
+    h('div', { class: 'skeleton skeleton--heading' }),
+    Array.from({ length: rows }, () => h('div', { class: 'skeleton skeleton--row' })),
   );
 }

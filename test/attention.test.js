@@ -38,11 +38,11 @@ test('завтрашний срок и сегодняшний будущий с�
   assert.equal(classifyTask(t, at('2026-09-23T16:20:01Z'), TZ), 'overdue');
 });
 
-test('waiting: не срочно до followUpAt, «Нужно напомнить» в день повторного контакта и позже', () => {
-  const t = { ...base, status: 'waiting', followUpAt: '2026-09-24' };
+test('waiting без наступившего срока — не сигнал внимания; «Нужно напомнить» сознательно не считается без подтверждённого источника (итерация 3)', () => {
+  const t = { ...base, status: 'waiting', followUpAt: '2026-09-01' };
   assert.equal(classifyTask(t, NOON, TZ), null);
-  assert.equal(classifyTask({ ...t, followUpAt: '2026-09-23' }, NOON, TZ), 'follow_up_due');
-  assert.equal(classifyTask({ ...t, followUpAt: '2026-09-01' }, NOON, TZ), 'follow_up_due');
+  // Просрочка по dueAt/dueDate у waiting-задачи по-прежнему работает — followUpAt тут ни при чём.
+  assert.equal(classifyTask({ ...t, dueDate: '2026-09-01' }, NOON, TZ), 'overdue');
 });
 
 test('done и cancelled не попадают во внимание; planned без срока — тоже', () => {
@@ -57,10 +57,9 @@ test('сортировка внимания: заблокированные и �
     { id: 't2', eventId: 'e1', kind: 'blocked', sortDue: null },
     { id: 't3', eventId: 'e1', kind: 'overdue', sortDue: 200 },
     { id: 't4', eventId: 'e2', kind: 'blocked', sortDue: 100 },
-    { id: 't5', eventId: 'e1', kind: 'follow_up_due', sortDue: null },
     { id: 't0', eventId: 'e2', kind: 'blocked', sortDue: null },
   ].sort(compareAttention);
-  assert.deepEqual(items.map((i) => i.id), ['t4', 't3', 't2', 't0', 't1', 't5']);
+  assert.deepEqual(items.map((i) => i.id), ['t4', 't3', 't2', 't0', 't1']);
 });
 
 test('nextChangeAt: ближайший dueAt или полночь пространства', () => {

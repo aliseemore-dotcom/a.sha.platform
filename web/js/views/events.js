@@ -264,17 +264,17 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
     if (attentionExpanded) {
       if (attentionAllCursor) {
         controls.push(h('button', {
-          type: 'button', class: 'btn btn--on-dark', disabled: attentionLoading,
+          type: 'button', class: 'btn btn--on-blue', disabled: attentionLoading,
           onclick: () => loadAttention(),
         }, attentionLoading ? 'Загружаем…' : `Показать ещё · ${attentionAll.length} из ${total}`));
       }
       controls.push(h('button', {
-        type: 'button', class: 'btn btn--on-dark attention__toggle', 'aria-expanded': 'true',
+        type: 'button', class: 'btn btn--on-blue attention__toggle', 'aria-expanded': 'true',
         'aria-controls': 'attention-list', onclick: collapseAttention,
       }, 'Свернуть'));
     } else if (total > limit) {
       controls.push(h('button', {
-        type: 'button', class: 'btn btn--on-dark attention__toggle', 'aria-expanded': 'false',
+        type: 'button', class: 'btn btn--on-blue attention__toggle', 'aria-expanded': 'false',
         'aria-controls': 'attention-list', disabled: attentionLoading, onclick: expandAttention,
       }, attentionLoading ? 'Загружаем…' : `Показать все ${total}`));
     }
