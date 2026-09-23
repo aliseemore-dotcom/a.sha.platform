@@ -6,7 +6,7 @@ import {
 } from './attention.js';
 import { visibleEvents, canSeeEvent, hasPermission } from './access.js';
 import { applyWeddingPlan } from './plan.js';
-import { isValidDate } from './time.js';
+import { isValidDate, localDate } from './time.js';
 
 export const PAGE_SIZE = 20;
 export const ATTENTION_PREVIEW = 5;
@@ -50,24 +50,40 @@ function parseLimit(limit) {
   return Math.min(n, 50);
 }
 
-function byDate(a, b) {
-  if (a.eventDate !== b.eventDate) {
-    if (a.eventDate === null) return 1;
-    if (b.eventDate === null) return -1;
-    return a.eventDate < b.eventDate ? -1 : 1;
-  }
-  if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+const collator = new Intl.Collator('ru', { sensitivity: 'base', numeric: true });
+const byTitleId = (a, b) => collator.compare(a.title, b.title) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/**
+ * «По дате» во вкладке «Активные»: будущие (включая сегодня) по возрастанию даты,
+ * затем с прошедшей датой — сначала недавние, затем без даты; внутри групп — название, id.
+ */
+function byDateActive(today) {
+  const group = (e) => (e.eventDate === null ? 2 : e.eventDate >= today ? 0 : 1);
+  return (a, b) => {
+    const ga = group(a);
+    const gb = group(b);
+    if (ga !== gb) return ga - gb;
+    if (a.eventDate !== b.eventDate) {
+      const asc = a.eventDate < b.eventDate ? -1 : 1;
+      return ga === 0 ? asc : -asc;
+    }
+    return byTitleId(a, b);
+  };
 }
 
-function byAttention(a, b) {
-  if (a.urgentCount !== b.urgentCount) return b.urgentCount - a.urgentCount;
+/** Архив: по дате события, сначала поздние; без даты — в конце. */
+function byDateArchive(a, b) {
   if (a.eventDate !== b.eventDate) {
     if (a.eventDate === null) return 1;
     if (b.eventDate === null) return -1;
-    return a.eventDate < b.eventDate ? -1 : 1;
+    return a.eventDate < b.eventDate ? 1 : -1;
   }
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  return byTitleId(a, b);
+}
+
+function byAttention(today) {
+  const date = byDateActive(today);
+  return (a, b) => b.urgentCount - a.urgentCount || date(a, b);
 }
 
 /**
@@ -124,7 +140,8 @@ function publicCard({ _search, ...card }) {
 
 export function listEvents(ctx, query = {}) {
   const lifecycle = query.lifecycle === 'archived' ? 'archived' : 'active';
-  const sort = query.sort === 'attention' ? 'attention' : 'date';
+  // В архиве срочных сигналов нет, поэтому один порядок: по дате события, сначала поздние.
+  const sort = lifecycle === 'archived' ? 'date_desc' : query.sort === 'attention' ? 'attention' : 'date';
   const q = normalizeSearch(query.q);
   const offset = decodeCursor(query.cursor);
   const limit = parseLimit(query.limit);
@@ -137,7 +154,8 @@ export function listEvents(ctx, query = {}) {
 
   let list = cards.filter((c) => c.lifecycle === lifecycle);
   if (q) list = list.filter((c) => c._search.includes(q));
-  list.sort(sort === 'attention' ? byAttention : byDate);
+  const today = localDate(ctx.now, ctx.timeZone);
+  list.sort(sort === 'date_desc' ? byDateArchive : sort === 'attention' ? byAttention(today) : byDateActive(today));
 
   const page = list.slice(offset, offset + limit);
   const nextOffset = offset + page.length;
@@ -145,6 +163,7 @@ export function listEvents(ctx, query = {}) {
   return {
     items: page.map(publicCard),
     total: list.length,
+    sort,
     activeTotal,
     archivedTotal,
     nextCursor: nextOffset < list.length ? encodeCursor(nextOffset) : null,
@@ -172,6 +191,22 @@ export function listAttention(ctx, query = {}) {
 
 // ---------- один проект (минимум для перехода в обзор) ----------
 
+function publicTask(ctx, t) {
+  return {
+    id: t.id,
+    title: t.title,
+    section: t.section ?? null,
+    status: t.status,
+    dueAt: t.dueAt ?? null,
+    dueDate: t.dueDate ?? null,
+    followUpAt: t.followUpAt ?? null,
+    assigneeName: ctx.store.getUser(t.assigneeId)?.name ?? null,
+    blockedReason: t.blockedReason ?? null,
+    templateKey: t.templateKey ?? null,
+    updatedAt: t.updatedAt,
+  };
+}
+
 export function getEvent(ctx, eventId) {
   const event = ctx.store.getEvent(eventId);
   if (!canSeeEvent(ctx.user, event)) throw notFound();
@@ -181,13 +216,28 @@ export function getEvent(ctx, eventId) {
   return {
     event: publicCard(card),
     attention: attention.filter((i) => i.eventId === eventId).map(publicAttentionItem),
-    tasks: tasks.map((t) => ({
-      id: t.id, title: t.title, section: t.section ?? null, status: t.status,
-      templateKey: t.templateKey ?? null,
-    })),
+    tasks: tasks.map((t) => publicTask(ctx, t)),
     canArchive: hasPermission(ctx.user, 'event:archive'),
     timeZone: ctx.timeZone,
   };
+}
+
+/**
+ * Отметить задачу выполненной. Счётчики и карточки пересчитываются из тех же данных
+ * при следующем запросе списка — вручную ничего не правится.
+ */
+export function completeTask(ctx, eventId, taskId) {
+  const event = ctx.store.getEvent(eventId);
+  if (!canSeeEvent(ctx.user, event)) throw notFound();
+  const task = ctx.store.getTask(taskId);
+  if (!task || task.eventId !== eventId) {
+    throw new ServiceError(404, 'task_not_found', 'Задача не найдена или недоступна');
+  }
+  if (event.lifecycle !== 'active') throw new ServiceError(409, 'archived', 'Проект в архиве');
+  if (task.status !== 'done' && task.status !== 'cancelled') {
+    ctx.store.updateTask(taskId, { status: 'done', updatedAt: new Date(ctx.now).toISOString() });
+  }
+  return { eventId, task: publicTask(ctx, ctx.store.getTask(taskId)) };
 }
 
 // ---------- создание ----------

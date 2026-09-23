@@ -18,7 +18,7 @@ function match(pathname) {
   let m = pathname.match(/^\/events\/([A-Za-z0-9_-]+)\/overview$/);
   if (m) return { view: 'overview', params: { eventId: m[1] } };
   m = pathname.match(/^\/events\/([A-Za-z0-9_-]+)\/tasks\/([A-Za-z0-9_-]+)$/);
-  if (m) return { redirect: `/events/${m[1]}/overview?focus=attention&task=${m[2]}` };
+  if (m) return { view: 'overview', params: { eventId: m[1], taskId: m[2] } };
   if (pathname === '/') return { redirect: '/events' };
   return { view: 'notFound' };
 }
@@ -43,25 +43,61 @@ document.addEventListener('click', (e) => {
 
 window.addEventListener('popstate', () => render());
 
+// Закрыть меню профиля по клику вне его (один обработчик на приложение).
+document.addEventListener('click', (e) => {
+  const profile = document.querySelector('.profile');
+  if (!profile || profile.contains(e.target)) return;
+  profile.querySelector('.profile__panel').hidden = true;
+  profile.querySelector('.profile__toggle').setAttribute('aria-expanded', 'false');
+});
+
+const ROLE = { owner: 'Владелец', member: 'Участник' };
+
+/**
+ * Шапка: на широком экране — название агентства; на узком оно уходит в меню профиля,
+ * чтобы не обрезаться до «Тестовое агент…». «Выйти» — в меню, без переполнения строки.
+ */
 function header() {
   const { user, workspace, demo } = session;
+  const menuId = 'profile-menu';
+  const panel = h('div', { class: 'profile__panel', id: menuId, hidden: true },
+    h('p', { class: 'profile__name' }, user.name),
+    h('p', { class: 'profile__meta' }, `${ROLE[user.role] ?? user.role} · ${workspace.name}`),
+    demo ? h('p', { class: 'profile__meta' }, 'Тестовый стенд: данные вымышленные') : null,
+    h('button', {
+      type: 'button', class: 'btn btn--secondary profile__logout',
+      onclick: async () => {
+        await api.logout().catch(() => {});
+        session = null;
+        location.assign('/login');
+      },
+    }, 'Выйти'),
+  );
+  const toggle = h('button', {
+    type: 'button', class: 'profile__toggle', 'aria-expanded': 'false', 'aria-controls': menuId,
+  }, h('span', { class: 'profile__avatar', 'aria-hidden': 'true' }, user.name.slice(0, 1)),
+  h('span', { class: 'profile__label' }, user.name),
+  h('span', { class: 'visually-hidden' }, ' — меню профиля'),
+  h('span', { class: 'profile__caret', 'aria-hidden': 'true' }, '▾'));
+
+  const wrap = h('div', { class: 'profile' }, toggle, panel);
+  const setOpen = (open) => {
+    panel.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+  };
+  toggle.addEventListener('click', () => setOpen(panel.hidden));
+  wrap.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !panel.hidden) { setOpen(false); toggle.focus(); }
+  });
+  wrap.addEventListener('focusout', (e) => { if (!wrap.contains(e.relatedTarget)) setOpen(false); });
+
   return h('header', { class: 'app-header' },
     h('div', { class: 'app-header__inner container' },
       h('div', { class: 'app-header__place' },
         h('span', { class: 'app-header__workspace' }, workspace.name),
         demo ? h('span', { class: 'stand-badge', title: 'Данные вымышленные, вход без пароля' }, 'Тестовый стенд') : null,
       ),
-      h('nav', { class: 'app-header__user', 'aria-label': 'Пользователь' },
-        h('span', { class: 'app-header__name' }, user.name),
-        h('button', {
-          type: 'button', class: 'btn btn--ghost btn--small',
-          onclick: async () => {
-            await api.logout().catch(() => {});
-            session = null;
-            location.assign('/login');
-          },
-        }, 'Выйти'),
-      ),
+      wrap,
     ),
   );
 }

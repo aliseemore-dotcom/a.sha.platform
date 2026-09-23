@@ -1,14 +1,18 @@
-// Экран 01 «Мои мероприятия».
+// Экран 01 «Мои мероприятия» (итерация 2).
 // Состояние вкладки, поиска и сортировки живёт в URL; поиск, сортировка и пагинация — на сервере.
 
 import { h, clear, announce } from '../dom.js';
 import { api } from '../api.js';
-import { attentionRow, eventCard, cardSkeleton } from '../ui/components.js';
+import { attentionRow, eventCard, cardSkeleton, attentionSkeleton } from '../ui/components.js';
 import { openCreateDialog } from '../ui/createDialog.js';
 import { countWeddings } from '../format.js';
 
 const SEARCH_DEBOUNCE = 300;
 const MAX_TIMER = 2 ** 31 - 1;
+const ATTENTION_PAGE = 20;
+// Видимых строк внимания до раскрытия: телефон — 3, шире — 5.
+const mobileQuery = window.matchMedia('(max-width: 767px)');
+const attentionLimit = () => (mobileQuery.matches ? 3 : 5);
 
 function readQuery(query) {
   return {
@@ -35,8 +39,11 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
   let data = null;          // последний ответ списка
   let items = [];           // загруженные карточки
   let nextCursor = null;
-  let attention = [];       // показанные строки внимания
-  let attentionCursor = null;
+  let attentionExpanded = false;
+  let attentionAll = [];    // раскрытый список, догружается страницами по 20
+  let attentionAllCursor = null;
+  let attentionLoading = false;
+  let attentionError = false;
   let loading = false;
   let loadingMore = false;
   let loadError = null;
@@ -86,6 +93,8 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
     h('option', { value: 'attention' }, 'По вниманию'),
   );
   sortSelect.value = state.sort;
+  // В архиве один порядок — подписываем его, а не показываем неработающий выбор.
+  const sortArchiveNote = h('p', { class: 'sort-note' }, 'По дате события, сначала поздние');
 
   const toolbar = h('div', { class: 'toolbar' },
     h('nav', { class: 'tabs', 'aria-label': 'Проекты' }, tabActive, tabArchive),
@@ -98,12 +107,13 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
         h('label', { class: 'sort__label', for: 'events-sort' }, 'Сортировка'),
         sortSelect,
       ),
+      sortArchiveNote,
     ),
   );
 
   const listSlot = h('div', { class: 'list-slot' });
-  const listSection = h('section', { class: 'list-section', 'aria-labelledby': 'list-heading' },
-    h('h2', { class: 'visually-hidden', id: 'list-heading' }, 'Список свадеб'),
+  const listSection = h('section', { class: 'list-section', id: 'projects', 'aria-labelledby': 'list-heading' },
+    h('h2', { class: 'visually-hidden', id: 'list-heading', tabindex: '-1' }, 'Список свадеб'),
     toolbar,
     listSlot,
   );
@@ -135,8 +145,6 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
       data = res;
       items = res.items;
       nextCursor = res.nextCursor;
-      attention = res.attentionPreview;
-      attentionCursor = res.attentionNextCursor;
       loadError = null;
       refreshError = null;
       scheduleRefresh(res.refreshAt);
@@ -152,6 +160,8 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
       if (!signal.aborted) {
         loading = false;
         renderAll();
+        // Раскрытый список внимания обновляется из того же источника, что и счётчик.
+        if (attentionExpanded && data && !loadError) loadAttention({ reset: true });
       }
     }
   }
@@ -176,21 +186,43 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
     }
   }
 
-  async function loadMoreAttention(button) {
-    if (!attentionCursor) return;
-    button.disabled = true;
-    button.textContent = 'Загружаем…';
+  async function loadAttention({ reset = false } = {}) {
+    if (attentionLoading) return;
+    attentionLoading = true;
+    attentionError = false;
+    if (!reset) renderAttention();
     try {
-      const res = await api.listAttention({ cursor: attentionCursor, limit: 20 });
-      const firstNew = attention.length;
-      attention = attention.concat(res.items);
-      attentionCursor = res.nextCursor;
+      const limit = reset ? Math.min(50, Math.max(ATTENTION_PAGE, attentionAll.length)) : ATTENTION_PAGE;
+      const res = await api.listAttention({ cursor: reset ? undefined : attentionAllCursor, limit });
+      const firstNew = reset ? 0 : attentionAll.length;
+      attentionAll = reset ? res.items : attentionAll.concat(res.items);
+      attentionAllCursor = res.nextCursor;
+      attentionLoading = false;
       renderAttention();
-      attentionSlot.querySelectorAll('.attention-row__link')[firstNew]?.focus();
+      if (!reset && firstNew > 0) attentionSlot.querySelectorAll('.attention-row__link')[firstNew]?.focus();
     } catch {
-      button.disabled = false;
-      button.textContent = 'Не удалось загрузить. Повторить';
+      attentionLoading = false;
+      attentionError = true;
+      renderAttention();
     }
+  }
+
+  function expandAttention() {
+    attentionExpanded = true;
+    attentionAll = [];
+    attentionAllCursor = null;
+    const firstHidden = attentionLimit();
+    loadAttention({ reset: true }).then(() => {
+      attentionSlot.querySelectorAll('.attention-row__link')[firstHidden]?.focus();
+    });
+  }
+
+  function collapseAttention() {
+    attentionExpanded = false;
+    attentionAll = [];
+    attentionAllCursor = null;
+    renderAttention();
+    attentionSlot.querySelector('.attention__toggle')?.focus();
   }
 
   function scheduleRefresh(refreshAt) {
@@ -203,24 +235,71 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
 
   function renderAttention() {
     clear(attentionSlot);
-    if (!data || data.attentionTotal === 0) return;
+    if (!data) {
+      if (loading && !loadError) attentionSlot.append(attentionSkeleton(attentionLimit()));
+      return;
+    }
+    // Нет проектов вовсе — onboarding в списке, блок внимания не показываем.
+    if (data.activeTotal === 0 && data.archivedTotal === 0) return;
+
+    if (data.attentionTotal === 0) {
+      attentionSlot.append(h('section', { class: 'attention-calm', 'aria-labelledby': 'attention-heading' },
+        h('h2', { class: 'attention-calm__title', id: 'attention-heading' },
+          h('span', { class: 'shape shape--done', 'aria-hidden': 'true' }),
+          'Сейчас ничего не требует срочного решения'),
+        data.activeTotal > 0
+          ? h('a', { class: 'attention-calm__link', href: '#projects', onclick: goToProjects }, 'К проектам ↓')
+          : null,
+      ));
+      return;
+    }
+
     const tz = data.timeZone;
     const now = Date.now();
+    const limit = attentionLimit();
+    const rows = attentionExpanded && attentionAll.length ? attentionAll : data.attentionPreview.slice(0, limit);
+    const total = data.attentionTotal;
+
+    const controls = [];
+    if (attentionExpanded) {
+      if (attentionAllCursor) {
+        controls.push(h('button', {
+          type: 'button', class: 'btn btn--on-dark', disabled: attentionLoading,
+          onclick: () => loadAttention(),
+        }, attentionLoading ? 'Загружаем…' : `Показать ещё · ${attentionAll.length} из ${total}`));
+      }
+      controls.push(h('button', {
+        type: 'button', class: 'btn btn--on-dark attention__toggle', 'aria-expanded': 'true',
+        'aria-controls': 'attention-list', onclick: collapseAttention,
+      }, 'Свернуть'));
+    } else if (total > limit) {
+      controls.push(h('button', {
+        type: 'button', class: 'btn btn--on-dark attention__toggle', 'aria-expanded': 'false',
+        'aria-controls': 'attention-list', disabled: attentionLoading, onclick: expandAttention,
+      }, attentionLoading ? 'Загружаем…' : `Показать все ${total}`));
+    }
+
     attentionSlot.append(
       h('section', { class: 'attention', 'aria-labelledby': 'attention-heading', id: 'attention' },
-        h('h2', { class: 'attention__title', id: 'attention-heading' }, `Требует внимания · ${data.attentionTotal}`),
-        h('ol', { class: 'attention__list' }, attention.map((item) => attentionRow(item, tz, now))),
-        attentionCursor
-          ? h('button', {
-            type: 'button', class: 'btn btn--on-dark attention__more',
-            onclick: (e) => loadMoreAttention(e.currentTarget),
-          }, 'Показать ещё')
+        h('h2', { class: 'attention__title', id: 'attention-heading' }, `Требует внимания · ${total}`),
+        h('ol', { class: 'attention__list', id: 'attention-list' }, rows.map((item) => attentionRow(item, tz, now))),
+        attentionError
+          ? h('p', { class: 'attention__error', role: 'alert' }, 'Не удалось загрузить список. Попробуйте ещё раз.')
           : null,
+        controls.length ? h('div', { class: 'attention__controls' }, controls) : null,
       ),
     );
   }
 
+  function goToProjects(e) {
+    e.preventDefault();
+    listSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('list-heading')?.focus({ preventScroll: true });
+  }
+
   function renderTabs() {
+    sortSelect.parentElement.hidden = state.tab === 'archive';
+    sortArchiveNote.hidden = state.tab !== 'archive';
     const a = data?.activeTotal;
     const r = data?.archivedTotal;
     const base = { ...state };
@@ -274,7 +353,7 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
     if (!items.length) {
       if (q) {
         listSlot.append(emptyState(`По запросу «${q}» ничего не найдено`, null,
-          h('button', { type: 'button', class: 'btn btn--secondary', onclick: resetSearch }, 'Сбросить поиск')));
+          h('button', { type: 'button', class: 'btn btn--secondary', onclick: resetSearch }, 'Очистить поиск')));
       } else if (state.tab === 'archive') {
         listSlot.append(emptyState('В архиве пока ничего нет', null,
           h('a', { class: 'btn btn--secondary', href: writeQuery({ ...state, tab: 'active' }) }, 'Вернуться к активным')));
@@ -282,10 +361,6 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
         listSlot.append(emptyState('Нет активных свадеб', null, secondaryCreate()));
       }
       return;
-    }
-
-    if (state.tab === 'active' && data.attentionTotal === 0 && !q) {
-      listSlot.append(h('p', { class: 'list-note' }, 'Срочных вопросов сейчас нет'));
     }
 
     const now = Date.now();
@@ -386,7 +461,11 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
   window.addEventListener('online', onOnline);
   window.addEventListener('offline', onOffline);
 
+  const onMedia = () => { if (data) renderAttention(); };
+  mobileQuery.addEventListener('change', onMedia);
+
   renderTabs();
+  renderAttention();
   load();
 
   return () => {
@@ -397,5 +476,6 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
     document.removeEventListener('visibilitychange', onFocus);
     window.removeEventListener('online', onOnline);
     window.removeEventListener('offline', onOffline);
+    mobileQuery.removeEventListener('change', onMedia);
   };
 }

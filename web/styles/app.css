@@ -1,5 +1,5 @@
 /* Экран 01 «Мои мероприятия». Рабочий режим плотности: непрозрачные поверхности, без стекла и blur
-   (стекло только поверх реального фото — см. .card__cover--photo). Все значения — через токены. */
+   (стекло только поверх реального фото — см. .card__top--photo). Все значения — через токены. */
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -76,8 +76,38 @@ a { color: inherit; }
   font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .app-header__user { display: flex; align-items: center; gap: var(--space-1); }
-.app-header__name { color: var(--ink-secondary); font-size: var(--fs-caption); }
-@media (max-width: 479px) { .app-header__name { display: none; } }
+/* На узком экране название агентства уходит в меню профиля, а не обрезается многоточием */
+@media (max-width: 599px) { .app-header__workspace { display: none; } }
+
+.profile { position: relative; flex: none; }
+.profile__toggle {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  min-height: 44px; padding: 0 var(--space-1) 0 var(--space-half);
+  border: 0; border-radius: var(--radius-pill); background: transparent; cursor: pointer;
+}
+.profile__toggle:hover { background: var(--surface-muted); }
+.profile__avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ink-primary); color: var(--ink-on-dark); font-weight: 600; font-size: 14px;
+}
+.profile__label { font-weight: 500; }
+@media (max-width: 479px) { .profile__label { display: none; } }
+.profile__caret { font-size: 12px; color: var(--ink-secondary); }
+.profile__panel {
+  position: absolute; right: 0; top: calc(100% + var(--space-1)); z-index: 20;
+  width: min(280px, calc(100vw - 32px));
+  padding: var(--space-2);
+  background: var(--surface-white);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-button);
+  box-shadow: var(--shadow-float);
+  display: grid; gap: var(--space-half);
+}
+.profile__panel[hidden] { display: none; }
+.profile__name { font-weight: 600; }
+.profile__meta { font-size: var(--fs-caption); color: var(--ink-secondary); overflow-wrap: anywhere; }
+.profile__logout { margin-top: var(--space-1); width: 100%; }
 
 .stand-badge {
   flex: none;
@@ -237,9 +267,12 @@ a { color: inherit; }
 .attention-row__link:hover { background: rgba(247, 247, 247, 0.06); }
 .attention-row__link:focus-visible { outline-color: var(--ink-on-dark); }
 .attention-row__link .chip { grid-area: chip; justify-self: start; }
-.attention-row__title { grid-area: title; font-weight: 600; overflow-wrap: anywhere; }
+.attention-row__title {
+  grid-area: title; font-weight: 600; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 .attention-row__meta { grid-area: meta; font-size: var(--fs-caption); color: var(--ink-on-dark-secondary); overflow-wrap: anywhere; }
-.attention-row__arrow { grid-area: arrow; font-size: 18px; color: var(--ink-on-dark-secondary); }
+.attention-row__arrow { grid-area: arrow; flex: none; font-size: 18px; color: var(--ink-on-dark-secondary); }
 
 @media (min-width: 900px) {
   .attention-row__link {
@@ -247,7 +280,36 @@ a { color: inherit; }
     grid-template-areas: "chip title meta arrow";
   }
 }
-.attention__more { margin-top: var(--space-2); }
+.attention__controls { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
+.attention__error { margin-top: var(--space-1); color: var(--ink-on-dark); }
+@media (max-width: 767px) {
+  /* Три строки и кнопка раскрытия — блок не занимает весь первый экран телефона */
+  .attention { padding: var(--space-2) var(--space-2) var(--space-2); margin-bottom: var(--space-3); }
+  .attention__title { margin-bottom: var(--space-1); }
+  .attention-row__link { padding-block: 12px; min-height: 44px; }
+  .attention__controls .btn { flex: 1; }
+}
+
+/* Спокойное состояние: сигналов нет — компактная светлая строка, а не пустая тёмная панель */
+.attention-calm {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+  background: var(--olive-tint);
+  border-radius: var(--radius-button);
+}
+.attention-calm__title {
+  display: flex; align-items: center; gap: var(--space-1);
+  font-size: var(--fs-body); font-weight: 600; color: var(--olive-ink);
+}
+.attention-calm__link {
+  display: inline-flex; align-items: center; min-height: 44px;
+  font-weight: 600; color: var(--ink-primary); text-underline-offset: 3px;
+}
+.attention--skeleton { display: grid; gap: var(--space-2); }
+.skeleton--on-dark { background: rgba(247, 247, 247, 0.12); }
+.skeleton--heading { height: 28px; width: 45%; }
+.skeleton--row { height: 44px; }
 
 /* Светлый вариант списка — внутри обзора проекта */
 .attention__list--light .attention-row + .attention-row { border-top-color: var(--line-soft); }
@@ -302,6 +364,8 @@ a { color: inherit; }
 .sort { display: flex; align-items: center; gap: var(--space-1); }
 .sort__label { font-size: var(--fs-caption); color: var(--ink-secondary); white-space: nowrap; }
 .select { width: auto; padding-right: var(--space-4); cursor: pointer; }
+.sort[hidden], .sort-note[hidden] { display: none; }
+.sort-note { font-size: var(--fs-caption); color: var(--ink-secondary); }
 
 @media (max-width: 767px) {
   .toolbar { flex-direction: column; align-items: stretch; }
@@ -312,6 +376,10 @@ a { color: inherit; }
   .sort__label { display: none; }
   .select { max-width: 150px; }
 }
+@media (max-width: 379px) {
+  .toolbar__filters { flex-wrap: wrap; }
+  .search, .sort, .select { width: 100%; max-width: none; flex: 1 1 100%; }
+}
 
 .list-note { color: var(--ink-secondary); margin-bottom: var(--space-2); }
 
@@ -321,11 +389,12 @@ a { color: inherit; }
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
+  /* Карточки по содержимому: без растяжения до соседа и пустого места над кнопкой */
+  align-items: start;
 }
 @media (min-width: 720px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 .card__inner {
-  height: 100%;
   display: flex; flex-direction: column;
   background: var(--surface-white);
   border: 1px solid var(--line-soft);
@@ -334,22 +403,21 @@ a { color: inherit; }
 }
 .card--urgent .card__inner { border-color: var(--status-blocked); }
 
-.card__cover {
+.card__top {
   position: relative;
   display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2);
-  min-height: 136px;
   padding: var(--space-2) var(--space-3);
   /* Нейтральная поверхность системы вместо фото, если обложка не загружена */
   background: linear-gradient(135deg, var(--surface-muted) 0%, var(--canvas) 100%);
 }
-.card--archived .card__cover { background: var(--canvas); }
-.card__cover > .chip { flex: 0 1 auto; min-width: 0; white-space: normal; }
+.card--archived .card__top { background: var(--canvas); }
+.card__top > .chip { flex: 0 1 auto; min-width: 0; white-space: normal; }
 .card__photo {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
 }
-.card__cover--photo .chip,
-.card__cover--photo .dateblock { position: relative; }
-.card__cover--photo .dateblock {
+.card__top--photo .chip,
+.card__top--photo .dateblock { position: relative; }
+.card__top--photo .dateblock {
   /* Тёмное стекло допустимо только поверх реального фото */
   background: rgba(30, 30, 30, 0.48);
   backdrop-filter: blur(16px);
@@ -363,20 +431,20 @@ a { color: inherit; }
   display: flex; flex-direction: column; align-items: flex-end; text-align: right;
   flex: none;
 }
-.dateblock__day { font-size: var(--fs-date-xl); font-weight: 600; line-height: 0.95; letter-spacing: -0.02em; }
+.dateblock__day { font-size: clamp(40px, 4vw, 52px); font-weight: 600; line-height: 0.95; letter-spacing: -0.02em; }
 .dateblock__month { margin-top: var(--space-half); font-size: var(--fs-caption); font-weight: 500; }
 .dateblock__rel { font-size: var(--fs-caption); color: var(--ink-secondary); }
-.card__cover--photo .dateblock__rel { color: var(--ink-on-dark-secondary); }
-.dateblock--unknown { align-self: flex-end; }
+.card__top--photo .dateblock__rel { color: var(--ink-on-dark-secondary); }
+.dateblock--unknown { align-self: center; }
 .dateblock__unknown { font-weight: 600; color: var(--ink-secondary); }
 
 .card__body {
-  flex: 1;
   display: flex; flex-direction: column; gap: var(--space-1);
   padding: var(--space-2) var(--space-3) 0;
 }
 .card__kicker {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .card__title {
   font-size: var(--fs-card-title); font-weight: 600; line-height: 1.25;
@@ -402,11 +470,11 @@ a { color: inherit; }
 
 .card__work { color: var(--ink-primary); overflow-wrap: anywhere; }
 .card__work-label { color: var(--sky-ink); font-weight: 600; }
-.card__work--empty { color: var(--ink-secondary); }
+.card__work-empty { color: var(--ink-secondary); }
 
 .card__actions {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1);
-  padding: var(--space-2) var(--space-3) var(--space-3);
+  padding: var(--space-1) var(--space-3) var(--space-2);
 }
 .card__open {
   display: inline-flex; align-items: center; min-height: 44px;
@@ -419,8 +487,9 @@ a { color: inherit; }
 /* ---------- скелетоны ---------- */
 
 .skeleton { background: var(--surface-muted); border-radius: 8px; }
-.card--skeleton .card__inner { min-height: 300px; }
-.card--skeleton .card__cover { border-radius: 0; }
+.card--skeleton .card__inner { min-height: 240px; }
+.skeleton--chip { width: 110px; height: 22px; border-radius: var(--radius-pill); }
+.skeleton--date { width: 64px; height: 56px; }
 .skeleton--line { height: 14px; }
 .skeleton--short { width: 40%; }
 .skeleton--long { width: 70%; }
@@ -558,3 +627,31 @@ a { color: inherit; }
 }
 .plan-item > span:first-child { overflow-wrap: anywhere; }
 .plan-item--focus { background: var(--accent-tint); margin-inline: calc(-1 * var(--space-1)); padding-inline: var(--space-1); }
+
+/* ---------- панель задачи ---------- */
+
+.task-panel {
+  background: var(--surface-white);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+  display: grid; gap: var(--space-2);
+}
+.task-panel:focus { outline: 2px solid var(--ink-primary); outline-offset: 2px; }
+.task-panel__title { font-size: var(--fs-heading); font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.task-panel__chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.task-panel__facts { margin: 0; display: grid; gap: var(--space-1); }
+.task-panel__fact { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: var(--space-2); }
+.task-panel__fact dt { color: var(--ink-secondary); }
+.task-panel__fact dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 599px) { .task-panel__fact { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+.task-panel__status:empty { display: none; }
+.task-panel__status { color: var(--status-blocked); }
+.task-panel__actions { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.task-missing { margin-bottom: var(--space-3); }
+.task-missing:focus { outline: 2px solid var(--ink-primary); outline-offset: 2px; }
+.task-missing__actions { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.plan-item__link { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; overflow-wrap: anywhere; }
+.plan-item__link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.plan-item__link[aria-current] { font-weight: 600; }

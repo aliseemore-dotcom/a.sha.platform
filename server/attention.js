@@ -1,9 +1,15 @@
-// Правила «Требует внимания» и «Сейчас в работе» (спецификация экрана 01, раздел 4).
+// Правила «Требует внимания» и «В работе» (экран 01, итерация 2, раздел 2).
 // Чистые функции: время и часовой пояс передаются явно, чтобы правила можно было проверить тестами.
 
 import { localDate, startOfLocalDay, addDays } from './time.js';
 
-export const ATTENTION_PRIORITY = { overdue: 1, blocked: 2, due_today: 3, follow_up_due: 4 };
+/**
+ * Причина строки внимания определяется по приоритету blocked → overdue → due_today → follow_up_due:
+ * заблокированная и одновременно просроченная задача — одна строка «Заблокировано».
+ * Сортировка идёт группами: заблокированные и просроченные вместе выше «Сегодня»,
+ * «Нужно напомнить» (ожидание ответа, сигнал из спецификации экрана 01) — последней группой.
+ */
+export const ATTENTION_GROUP = { blocked: 1, overdue: 1, due_today: 2, follow_up_due: 3 };
 
 const CLOSED = new Set(['done', 'cancelled']);
 
@@ -26,15 +32,15 @@ function followUpDate(task, timeZone) {
   return task.followUpAt.length > 10 ? localDate(Date.parse(task.followUpAt), timeZone) : task.followUpAt;
 }
 
-/** Вид внимания задачи или null. Один объект — один вид, с наивысшим приоритетом. */
+/** Вид внимания задачи или null. Одна задача — один вид, с наивысшим приоритетом. */
 export function classifyTask(task, now, timeZone) {
   if (CLOSED.has(task.status)) return null;
-  const today = localDate(now, timeZone);
+  // Блокировка — явный статус задачи, из просрочки не выводится.
+  if (task.status === 'blocked') return 'blocked';
 
+  const today = localDate(now, timeZone);
   const overdueAt = overdueFrom(task, timeZone);
   if (overdueAt !== null && now >= overdueAt) return 'overdue';
-
-  if (task.status === 'blocked') return 'blocked';
 
   const dueDay = task.dueAt ? localDate(Date.parse(task.dueAt), timeZone) : task.dueDate;
   if (dueDay && dueDay === today) return 'due_today';
@@ -53,22 +59,24 @@ function compareNullableLast(a, b) {
   return a < b ? -1 : 1;
 }
 
+const byString = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
 /**
- * Сортировка списка внимания: приоритет вида → срок (у просроченных сначала более старый)
- * → дата свадьбы (неизвестная последней) → стабильный id.
+ * Сортировка списка внимания: группа → более старый срок выше (без срока — в конце группы)
+ * → стабильно по id проекта и id задачи.
  */
 export function compareAttention(a, b) {
   return (
-    ATTENTION_PRIORITY[a.kind] - ATTENTION_PRIORITY[b.kind] ||
+    ATTENTION_GROUP[a.kind] - ATTENTION_GROUP[b.kind] ||
     compareNullableLast(a.sortDue, b.sortDue) ||
-    compareNullableLast(a.eventDate, b.eventDate) ||
-    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+    byString(a.eventId, b.eventId) ||
+    byString(a.id, b.id)
   );
 }
 
+/** Прямой маршрут конкретной задачи в проекте; работает после обновления страницы. */
 export function taskTargetUrl(task) {
-  // Детальный маршрут задачи ещё не готов: открываем обзор проекта с фокусом на «Срочно решить».
-  return `/events/${encodeURIComponent(task.eventId)}/overview?focus=attention&task=${encodeURIComponent(task.id)}`;
+  return `/events/${encodeURIComponent(task.eventId)}/tasks/${encodeURIComponent(task.id)}`;
 }
 
 /** Элементы внимания по набору активных проектов, отсортированные. */
@@ -91,7 +99,6 @@ export function buildAttention({ events, tasksByEvent, usersById, now, timeZone 
         ownerName: usersById.get(task.assigneeId)?.name ?? null,
         targetUrl: taskTargetUrl(task),
         sortDue: overdueFrom(task, timeZone),
-        eventDate: event.eventDate,
       });
     }
   }
@@ -100,11 +107,11 @@ export function buildAttention({ events, tasksByEvent, usersById, now, timeZone 
 }
 
 export function publicAttentionItem(item) {
-  const { sortDue, eventDate, ...rest } = item;
+  const { sortDue, ...rest } = item;
   return rest;
 }
 
-/** «Сейчас в работе»: in_progress вне внимания, ближайший срок → updatedAt по убыванию, максимум 2. */
+/** «В работе»: in_progress вне внимания, ближайший срок → updatedAt по убыванию, максимум 2. */
 export function activePreview(tasks, attentionIds, timeZone) {
   return tasks
     .filter((t) => t.status === 'in_progress' && !attentionIds.has(t.id))

@@ -1,8 +1,8 @@
-// Компоненты экрана: метка статуса, строка внимания, карточка свадьбы, скелетон.
+// Компоненты экрана: метка статуса, строка внимания, карточка свадьбы, скелетоны.
 
 import { h } from '../dom.js';
 import {
-  attentionLabel, dayNumber, monthYear, fullDate, relativeDay, isPast, pluralize,
+  attentionLabel, dayNumber, monthYear, fullDate, relativeDay, pluralize, projectStage,
 } from '../format.js';
 
 const KIND_TONE = { overdue: 'blocked', blocked: 'blocked', due_today: 'soon', follow_up_due: 'soon' };
@@ -15,15 +15,17 @@ export function statusChip(tone, text, attrs = {}) {
   );
 }
 
+/**
+ * Строка внимания — одна ссылка на конкретную задачу, без вложенных интерактивных элементов.
+ * Порядок: статус → задача → проект · ответственный.
+ */
 export function attentionRow(item, timeZone, now) {
   const { label, detail } = attentionLabel(item, timeZone, now);
-  const meta = [item.eventTitle, item.ownerName].filter(Boolean).join(' · ');
+  const owner = item.ownerName ?? 'Не назначен';
+  const meta = `${item.eventTitle} · ${owner}`;
+  const full = [label, item.title, meta, detail].filter(Boolean).join('. ');
   return h('li', { class: 'attention-row' },
-    h('a', {
-      href: item.targetUrl,
-      class: 'attention-row__link',
-      title: detail ?? undefined,
-    },
+    h('a', { href: item.targetUrl, class: 'attention-row__link', title: full, 'aria-label': full },
       statusChip(KIND_TONE[item.kind], label),
       h('span', { class: 'attention-row__title' }, item.title),
       h('span', { class: 'attention-row__meta' }, meta),
@@ -46,27 +48,20 @@ function dateBlock(card, timeZone, now) {
   );
 }
 
-function lifecycleChip(card, timeZone, now) {
-  if (card.lifecycle === 'archived') return statusChip('planned', 'В архиве');
-  if (card.eventDate && isPast(card.eventDate, timeZone, now)) {
-    return statusChip('progress', 'Дата прошла · проект активен');
-  }
-  return statusChip('progress', 'Активен');
-}
-
 /**
- * Карточка свадьбы. Внутри две ссылки (название и «Открыть проект»), поэтому карточка целиком
- * не кликабельна: интерактивные элементы не вкладываются друг в друга.
+ * Карточка свадьбы. Внутри две ссылки (название и «Открыть проект») и, в архиве, кнопка —
+ * поэтому карточка целиком не кликабельна: интерактивные элементы не вкладываются друг в друга.
  */
 export function eventCard(card, { timeZone, now, canArchive, onRestore }) {
   const href = `/events/${encodeURIComponent(card.id)}/overview`;
   const titleId = `card-title-${card.id}`;
   const urgent = card.lifecycle === 'active' && card.urgentCount > 0;
   const archived = card.lifecycle === 'archived';
+  const stage = projectStage(card, timeZone, now);
 
-  const cover = h('div', { class: `card__cover${card.coverUrl ? ' card__cover--photo' : ''}` },
+  const top = h('div', { class: `card__top${card.coverUrl ? ' card__top--photo' : ''}` },
     card.coverUrl ? h('img', { class: 'card__photo', src: card.coverUrl, alt: '' }) : null,
-    lifecycleChip(card, timeZone, now),
+    statusChip(stage.tone, stage.label),
     dateBlock(card, timeZone, now),
   );
 
@@ -82,18 +77,19 @@ export function eventCard(card, { timeZone, now, canArchive, onRestore }) {
         `Срочно · ${card.urgentCount}`),
       h('p', { class: 'card__urgent-text', title: detail ?? undefined },
         h('strong', {}, `${label}: `), card.urgentPreview.title,
-        more > 0 ? h('span', { class: 'card__more' }, ` и ещё ${more} ${pluralize(more, 'вопрос', 'вопроса', 'вопросов')}`) : null,
+        more > 0 ? h('span', { class: 'card__more' }, ` и ещё ${more}`) : null,
       ),
     );
   }
 
+  // «В работе» — отдельная подпись, поэтому соседство со «Срочно» не читается как противоречие.
   let workBlock = null;
   if (!archived) {
-    workBlock = card.activePreview.length
-      ? h('p', { class: 'card__work' },
-        h('span', { class: 'card__work-label' }, 'В работе: '),
-        card.activePreview.map((t) => t.title).join('; '))
-      : (urgent ? null : h('p', { class: 'card__work card__work--empty' }, 'Пока нет задач в работе'));
+    workBlock = h('p', { class: 'card__work' },
+      h('span', { class: 'card__work-label' }, 'В работе: '),
+      card.activePreview.length
+        ? card.activePreview.map((t) => t.title).join('; ')
+        : h('span', { class: 'card__work-empty' }, 'пока нет задач в работе'));
   }
 
   const actions = h('div', { class: 'card__actions' },
@@ -106,10 +102,10 @@ export function eventCard(card, { timeZone, now, canArchive, onRestore }) {
 
   return h('li', { class: `card${urgent ? ' card--urgent' : ''}${archived ? ' card--archived' : ''}` },
     h('article', { class: 'card__inner', 'aria-labelledby': titleId },
-      cover,
+      top,
       h('div', { class: 'card__body' },
-        h('p', { class: 'caption card__kicker' }, kicker),
-        h('h3', { class: 'card__title', id: titleId }, h('a', { href }, card.title)),
+        h('p', { class: 'caption card__kicker', title: kicker }, kicker),
+        h('h3', { class: 'card__title', id: titleId, title: card.title }, h('a', { href }, card.title)),
         urgentBlock,
         workBlock,
       ),
@@ -121,12 +117,21 @@ export function eventCard(card, { timeZone, now, canArchive, onRestore }) {
 export function cardSkeleton() {
   return h('li', { class: 'card card--skeleton', 'aria-hidden': 'true' },
     h('div', { class: 'card__inner' },
-      h('div', { class: 'card__cover skeleton' }),
+      h('div', { class: 'card__top' },
+        h('div', { class: 'skeleton skeleton--chip' }),
+        h('div', { class: 'skeleton skeleton--date' })),
       h('div', { class: 'card__body' },
         h('div', { class: 'skeleton skeleton--line skeleton--short' }),
         h('div', { class: 'skeleton skeleton--title' }),
         h('div', { class: 'skeleton skeleton--line skeleton--long' }),
       ),
     ),
+  );
+}
+
+export function attentionSkeleton(rows) {
+  return h('section', { class: 'attention attention--skeleton', 'aria-hidden': 'true' },
+    h('div', { class: 'skeleton skeleton--on-dark skeleton--heading' }),
+    Array.from({ length: rows }, () => h('div', { class: 'skeleton skeleton--on-dark skeleton--row' })),
   );
 }

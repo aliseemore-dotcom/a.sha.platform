@@ -57,7 +57,9 @@ export function seedDemo(store, now = Date.now()) {
     { dueDate: day(-2), assigneeId: 'usr_olga' });
   task('evt_demo_maria_ilya', 'Согласовать смету с флористом', 'waiting',
     { dueAt: iso(now - 3 * 3600_000), followUpAt: day(-1), assigneeId: 'usr_elena' });
-  task('evt_demo_maria_ilya', 'Утвердить декор зала', 'blocked', { assigneeId: 'usr_olga' });
+  task('evt_demo_maria_ilya', 'Утвердить декор зала', 'blocked', {
+    dueDate: day(-1), assigneeId: 'usr_olga', blockedReason: 'Пара ещё не утвердила бюджет на декор',
+  });
   task('evt_demo_maria_ilya', 'Рассадка гостей', 'in_progress', { dueDate: day(10) });
   task('evt_demo_maria_ilya', 'Подтвердить трансфер гостей', 'done', { dueDate: day(-5) });
 
@@ -69,9 +71,12 @@ export function seedDemo(store, now = Date.now()) {
 
   ev('evt_demo_alina_roman', 'Алина + Роман', day(75), 'Отель «Причал»',
     { createdAt: iso(now - 14 * 86400_000) });
-  task('evt_demo_alina_roman', 'Выбрать ведущего', 'blocked', { assigneeId: 'usr_elena' });
+  task('evt_demo_alina_roman', 'Выбрать ведущего', 'blocked', {
+    blockedReason: 'Пара не определилась с форматом вечера',
+  });
   task('evt_demo_alina_roman', 'Отправить паре варианты приглашений', 'in_progress', { dueDate: day(0) });
   task('evt_demo_alina_roman', 'Согласовать фотографа', 'in_progress', { dueDate: day(6) });
+  task('evt_demo_alina_roman', 'Отправить райдер ведущему', 'in_progress', { dueDate: day(1) });
 
   ev('evt_demo_ksenia_dmitry', 'Ксения + Дмитрий', day(-10), null,
     { createdAt: iso(now - 120 * 86400_000) });

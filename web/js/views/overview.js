@@ -1,11 +1,11 @@
 // Обзор проекта — минимальная версия, достаточная для переходов с экрана 01:
-// подтверждение создания, состояние плана, блок «Срочно решить», архив/восстановление.
-// Полный обзор описывается следующей спецификацией.
+// подтверждение создания, состояние плана, панель конкретной задачи (/events/:id/tasks/:taskId),
+// блок «Срочно решить», архив/восстановление. Полный обзор описывается следующей спецификацией.
 
 import { h, clear, announce } from '../dom.js';
 import { api } from '../api.js';
 import { attentionRow, statusChip } from '../ui/components.js';
-import { fullDate } from '../format.js';
+import { fullDate, dateTimeIn, attentionLabel } from '../format.js';
 
 const STATUS_WORD = {
   planned: ['planned', 'Запланировано'],
@@ -16,17 +16,27 @@ const STATUS_WORD = {
   cancelled: ['planned', 'Отменено'],
 };
 
-export function renderOverview(slot, { params, query, session }) {
+const CLOSED = new Set(['done', 'cancelled']);
+const KIND_TONE = { overdue: 'blocked', blocked: 'blocked', due_today: 'soon', follow_up_due: 'soon' };
+
+function dueText(task, timeZone) {
+  if (task.dueAt) return dateTimeIn(Date.parse(task.dueAt), timeZone);
+  if (task.dueDate) return `${fullDate(task.dueDate)}, до конца дня`;
+  return null;
+}
+
+export function renderOverview(slot, { params, session }) {
   const flash = history.state?.flash ?? null;
   if (flash) history.replaceState({ ...history.state, flash: null }, '');
-  const focusAttention = query.get('focus') === 'attention';
-  const focusTask = query.get('task');
+  const taskId = params.taskId ?? null;
+  const overviewUrl = `/events/${encodeURIComponent(params.eventId)}/overview`;
   const canArchive = session.user.role === 'owner';
   const canRetryPlan = session.permissions.createEvent;
 
   const main = h('main', { id: 'main', class: 'container page', 'aria-busy': 'true' });
   slot.append(main);
   let controller = new AbortController();
+  let firstRender = true;
 
   const back = () => h('p', { class: 'back' }, h('a', { href: '/events', class: 'link' }, '← Мои мероприятия'));
 
@@ -41,7 +51,9 @@ export function renderOverview(slot, { params, query, session }) {
       clear(main);
       main.removeAttribute('aria-busy');
       if (err.status === 404 || err.status === 403) {
-        main.append(back(), h('h1', { class: 'page-title' }, 'Проект не найден или недоступен'));
+        main.append(back(), h('div', { class: 'empty', role: 'alert' },
+          h('p', { class: 'empty__title' }, 'Проект не найден или доступ к нему закрыт'),
+          h('a', { class: 'btn btn--secondary', href: '/events' }, 'К списку мероприятий')));
       } else {
         main.append(back(), h('div', { class: 'empty', role: 'alert' },
           h('p', { class: 'empty__title' }, 'Не удалось загрузить проект'),
@@ -63,14 +75,63 @@ export function renderOverview(slot, { params, query, session }) {
     }
   }
 
+  function taskPanel(event, task, signal, timeZone, now) {
+    const [tone, word] = STATUS_WORD[task.status] ?? ['planned', task.status];
+    const due = dueText(task, timeZone);
+    const signalLabel = signal ? attentionLabel(signal, timeZone, now).label : null;
+    const status = h('p', { class: 'task-panel__status', role: 'status' });
+
+    const rows = [
+      ['Проект', event.title],
+      due ? ['Срок', due] : null,
+      ['Ответственный', task.assigneeName ?? 'Не назначен'],
+      task.section ? ['Раздел', task.section] : null,
+      task.blockedReason ? ['Причина блокировки', task.blockedReason] : null,
+    ].filter(Boolean);
+
+    const canComplete = !CLOSED.has(task.status) && event.lifecycle === 'active';
+    const completeBtn = canComplete
+      ? h('button', {
+        type: 'button', class: 'btn btn--primary',
+        onclick: async (e) => {
+          const b = e.currentTarget;
+          b.disabled = true;
+          try {
+            await api.completeTask(event.id, task.id);
+            announce('Задача отмечена выполненной', 0);
+            load();
+          } catch {
+            b.disabled = false;
+            status.textContent = 'Не удалось сохранить. Повторите попытку.';
+          }
+        },
+      }, 'Отметить выполненной')
+      : null;
+
+    return h('section', { class: 'task-panel', 'aria-labelledby': 'task-title', tabindex: '-1' },
+      h('p', { class: 'overline' }, 'Задача'),
+      h('h2', { class: 'task-panel__title', id: 'task-title' }, task.title),
+      h('div', { class: 'task-panel__chips' },
+        statusChip(tone, word),
+        signalLabel && signal.kind !== 'blocked' ? statusChip(KIND_TONE[signal.kind], signalLabel) : null),
+      h('dl', { class: 'task-panel__facts' },
+        rows.map(([k, v]) => h('div', { class: 'task-panel__fact' }, h('dt', {}, k), h('dd', {}, v)))),
+      status,
+      h('div', { class: 'task-panel__actions' },
+        completeBtn,
+        h('a', { class: 'btn btn--secondary', href: overviewUrl }, 'Закрыть задачу')),
+    );
+  }
+
   function render({ event, attention, tasks, timeZone }) {
     clear(main);
     main.removeAttribute('aria-busy');
-    document.title = `${event.title} — обзор`;
+    const task = taskId ? tasks.find((t) => t.id === taskId) : null;
+    document.title = task ? `${task.title} — ${event.title}` : `${event.title} — обзор`;
     const now = Date.now();
 
     const banners = [];
-    if (flash) banners.push(h('div', { class: 'banner banner--success', role: 'status' }, flash));
+    if (flash && firstRender) banners.push(h('div', { class: 'banner banner--success', role: 'status' }, flash));
     if (event.planStatus === 'pending') {
       banners.push(h('div', { class: 'banner banner--info', role: 'status' }, 'Создаём план подготовки'));
     }
@@ -86,8 +147,17 @@ export function renderOverview(slot, { params, query, session }) {
           },
         }, 'Повторить создание плана') : null));
     }
-    if (focusTask && !tasks.some((t) => t.id === focusTask && t.status !== 'done' && t.status !== 'cancelled')) {
-      banners.push(h('div', { class: 'banner banner--info', role: 'status' }, 'Элемент больше недоступен'));
+
+    let taskSection = null;
+    if (taskId && !task) {
+      taskSection = h('section', { class: 'empty task-missing', role: 'alert', tabindex: '-1' },
+        h('p', { class: 'empty__title' }, 'Задача больше недоступна'),
+        h('p', { class: 'empty__text' }, 'Её удалили или закрыли к ней доступ.'),
+        h('div', { class: 'task-missing__actions' },
+          h('a', { class: 'btn btn--secondary', href: overviewUrl }, 'Открыть проект'),
+          h('a', { class: 'btn btn--ghost', href: '/events' }, 'К списку мероприятий')));
+    } else if (task) {
+      taskSection = taskPanel(event, task, attention.find((i) => i.id === task.id), timeZone, now);
     }
 
     const meta = [
@@ -107,13 +177,11 @@ export function renderOverview(slot, { params, query, session }) {
       }, archived ? 'Вернуть в активные' : 'Переместить в архив')
       : null;
 
-    const attentionSection = h('section', {
-      class: 'zone', id: 'attention', tabindex: '-1', 'aria-labelledby': 'zone-attention',
-    },
+    const attentionSection = h('section', { class: 'zone', id: 'attention', 'aria-labelledby': 'zone-attention' },
       h('h2', { class: 'zone__title', id: 'zone-attention' }, `Срочно решить${attention.length ? ` · ${attention.length}` : ''}`),
       attention.length
         ? h('ol', { class: 'attention__list attention__list--light' }, attention.map((i) => attentionRow(i, timeZone, now)))
-        : h('p', { class: 'muted' }, archived ? 'Проект в архиве' : 'Срочных вопросов сейчас нет'),
+        : h('p', { class: 'muted' }, archived ? 'Проект в архиве' : 'Сейчас ничего не требует срочного решения'),
     );
 
     const bySection = new Map();
@@ -129,8 +197,10 @@ export function renderOverview(slot, { params, query, session }) {
           h('h3', { class: 'overline' }, section),
           h('ul', { class: 'plan-list' }, list.map((t) => {
             const [tone, word] = STATUS_WORD[t.status] ?? ['planned', t.status];
-            return h('li', { class: `plan-item${t.id === focusTask ? ' plan-item--focus' : ''}` },
-              h('span', {}, t.title), statusChip(tone, word));
+            const href = `/events/${encodeURIComponent(event.id)}/tasks/${encodeURIComponent(t.id)}`;
+            return h('li', { class: `plan-item${t.id === taskId ? ' plan-item--focus' : ''}` },
+              h('a', { href, class: 'plan-item__link', 'aria-current': t.id === taskId ? 'true' : null }, t.title),
+              statusChip(tone, word));
           }))))
         : h('p', { class: 'muted' }, 'Задач пока нет'),
     );
@@ -146,11 +216,13 @@ export function renderOverview(slot, { params, query, session }) {
         ),
         lifecycleBtn,
       ),
+      taskSection,
       h('div', { class: 'zones' }, attentionSection, planSection),
       h('p', { class: 'caption muted' }, 'Полный обзор проекта — следующий этап.'),
     );
 
-    if (focusAttention) attentionSection.focus();
+    if (taskSection && firstRender) taskSection.focus();
+    firstRender = false;
   }
 
   load();

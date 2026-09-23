@@ -22,10 +22,20 @@ test('срок-дата без времени остаётся «Сегодня�
   assert.equal(classifyTask(t, at('2026-09-23T21:00:00Z'), 'Europe/Amsterdam'), 'due_today');
 });
 
-test('blocked, но срок прошёл → overdue (показывается один раз по высшему приоритету)', () => {
+test('заблокированная и просроченная задача — одна строка «blocked»; блокировка не выводится из просрочки', () => {
   const t = { ...base, status: 'blocked', dueDate: '2026-09-20' };
-  assert.equal(classifyTask(t, NOON, TZ), 'overdue');
+  assert.equal(classifyTask(t, NOON, TZ), 'blocked');
   assert.equal(classifyTask({ ...base, status: 'blocked' }, NOON, TZ), 'blocked');
+  assert.equal(classifyTask({ ...base, dueDate: '2026-09-20' }, NOON, TZ), 'overdue');
+});
+
+test('завтрашний срок и сегодняшний будущий срок не просрочены', () => {
+  assert.equal(classifyTask({ ...base, dueDate: '2026-09-24' }, NOON, TZ), null);
+  assert.equal(classifyTask({ ...base, dueAt: '2026-09-24T06:00:00Z' }, NOON, TZ), null);
+  // 19:20 МСК: в 17:00 — «сегодня», после 19:20 — просрочено
+  const t = { ...base, dueAt: '2026-09-23T16:20:00Z' };
+  assert.equal(classifyTask(t, at('2026-09-23T14:00:00Z'), TZ), 'due_today');
+  assert.equal(classifyTask(t, at('2026-09-23T16:20:01Z'), TZ), 'overdue');
 });
 
 test('waiting: не срочно до followUpAt, «Нужно напомнить» в день повторного контакта и позже', () => {
@@ -41,15 +51,16 @@ test('done и cancelled не попадают во внимание; planned б�
   assert.equal(classifyTask({ ...base, status: 'planned' }, NOON, TZ), null);
 });
 
-test('сортировка внимания: приоритет → более старый срок → дата свадьбы → id', () => {
+test('сортировка внимания: заблокированные и просроченные вместе выше «Сегодня», старший срок выше, затем проект и id', () => {
   const items = [
-    { id: 'c', kind: 'blocked', sortDue: null, eventDate: '2027-01-01' },
-    { id: 'b', kind: 'overdue', sortDue: 200, eventDate: null },
-    { id: 'a', kind: 'overdue', sortDue: 100, eventDate: null },
-    { id: 'e', kind: 'blocked', sortDue: null, eventDate: null },
-    { id: 'd', kind: 'blocked', sortDue: null, eventDate: '2026-12-01' },
+    { id: 't1', eventId: 'e2', kind: 'due_today', sortDue: 50 },
+    { id: 't2', eventId: 'e1', kind: 'blocked', sortDue: null },
+    { id: 't3', eventId: 'e1', kind: 'overdue', sortDue: 200 },
+    { id: 't4', eventId: 'e2', kind: 'blocked', sortDue: 100 },
+    { id: 't5', eventId: 'e1', kind: 'follow_up_due', sortDue: null },
+    { id: 't0', eventId: 'e2', kind: 'blocked', sortDue: null },
   ].sort(compareAttention);
-  assert.deepEqual(items.map((i) => i.id), ['a', 'b', 'd', 'c', 'e']);
+  assert.deepEqual(items.map((i) => i.id), ['t4', 't3', 't2', 't0', 't1', 't5']);
 });
 
 test('nextChangeAt: ближайший dueAt или полночь пространства', () => {

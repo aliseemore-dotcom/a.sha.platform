@@ -70,36 +70,35 @@ export function isPast(date, timeZone, now = Date.now()) {
  * @returns {{ label: string, detail: string | null }}
  */
 export function attentionLabel(item, timeZone, now = Date.now()) {
+  const today = localDate(now, timeZone);
+  const overdueDays = (dueDay) => {
+    const days = Math.max(1, daysBetween(dueDay, today));
+    return `Просрочено ${days} ${pluralize(days, 'день', 'дня', 'дней')}`;
+  };
   switch (item.kind) {
     case 'overdue': {
       if (item.dueAt) {
         const due = Date.parse(item.dueAt);
-        const mins = Math.max(1, Math.floor((now - due) / 60000));
-        let label;
-        if (mins < 60) label = `Просрочено на ${mins} мин`;
-        else if (mins < 60 * 24) {
-          const hrs = Math.floor(mins / 60);
-          label = `Просрочено на ${hrs} ч`;
-        } else {
-          const days = Math.floor(mins / (60 * 24));
-          label = `Просрочено ${days} ${pluralize(days, 'день', 'дня', 'дней')}`;
-        }
+        const dueDay = localDate(due, timeZone);
+        // Срок сегодня уже прошёл — «с HH:mm», а не «1 день»
+        const label = dueDay === today ? `Просрочено с ${timeIn(due, timeZone)}` : overdueDays(dueDay);
         return { label, detail: `Срок: ${dateTimeIn(due, timeZone)}` };
       }
-      const days = Math.max(1, daysBetween(item.dueDate, localDate(now, timeZone)));
-      return {
-        label: `Просрочено ${days} ${pluralize(days, 'день', 'дня', 'дней')}`,
-        detail: `Срок: ${fullDate(item.dueDate)}`,
-      };
+      return { label: overdueDays(item.dueDate), detail: `Срок: ${fullDate(item.dueDate)}, до конца дня` };
     }
-    case 'blocked':
-      return { label: 'Заблокировано', detail: null };
+    case 'blocked': {
+      // Срок у заблокированной задачи показываем в подсказке, только если он есть
+      let detail = null;
+      if (item.dueAt) detail = `Срок: ${dateTimeIn(Date.parse(item.dueAt), timeZone)}`;
+      else if (item.dueDate) detail = `Срок: ${fullDate(item.dueDate)}`;
+      return { label: 'Заблокировано', detail };
+    }
     case 'due_today':
       if (item.dueAt) {
         const due = Date.parse(item.dueAt);
         return { label: `Сегодня · ${timeIn(due, timeZone)}`, detail: `Срок: ${dateTimeIn(due, timeZone)}` };
       }
-      return { label: 'Сегодня', detail: `Срок: ${fullDate(item.dueDate)}, в течение дня` };
+      return { label: 'Сегодня', detail: `Срок: ${fullDate(item.dueDate)}, до конца дня` };
     case 'follow_up_due':
       return {
         label: 'Нужно напомнить',
@@ -108,6 +107,13 @@ export function attentionLabel(item, timeZone, now = Date.now()) {
     default:
       return { label: '', detail: null };
   }
+}
+
+/** Отображаемая стадия проекта. Сохранённый статус не меняется: это только подпись. */
+export function projectStage(card, timeZone, now = Date.now()) {
+  if (card.lifecycle === 'archived') return { tone: 'planned', label: 'В архиве' };
+  if (card.eventDate && isPast(card.eventDate, timeZone, now)) return { tone: 'done', label: 'Завершение проекта' };
+  return { tone: 'progress', label: 'В подготовке' };
 }
 
 export function countWeddings(n) {

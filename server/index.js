@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { createStore } from './store.js';
 import {
   listEvents, listAttention, getEvent, createEvent, retryPlan,
-  archiveEvent, restoreEvent, ServiceError,
+  archiveEvent, restoreEvent, completeTask, ServiceError,
 } from './events.js';
 import { hasPermission } from './access.js';
 import { isValidTimeZone } from './time.js';
@@ -171,6 +171,12 @@ async function handleApi(req, res, url) {
   }
   if (pathname === '/api/events/attention' && method === 'GET') {
     return json(res, 200, listAttention(ctx, Object.fromEntries(url.searchParams)));
+  }
+
+  const t = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/tasks\/([A-Za-z0-9_-]{1,64})\/complete$/);
+  if (t && method === 'POST') {
+    await readJson(req);
+    return json(res, 200, completeTask(ctx, t[1], t[2]));
   }
 
   const m = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})(?:\/(archive|restore|plan))?$/);

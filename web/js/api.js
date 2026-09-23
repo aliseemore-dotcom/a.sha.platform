@@ -57,5 +57,7 @@ export const api = {
   createEvent: (body) => request('POST', '/api/events', body),
   archiveEvent: (id) => request('POST', `/api/events/${encodeURIComponent(id)}/archive`, {}),
   restoreEvent: (id) => request('POST', `/api/events/${encodeURIComponent(id)}/restore`, {}),
+  completeTask: (eventId, taskId) => request('POST',
+    `/api/events/${encodeURIComponent(eventId)}/tasks/${encodeURIComponent(taskId)}/complete`, {}),
   retryPlan: (id) => request('POST', `/api/events/${encodeURIComponent(id)}/plan`, {}),
 };
