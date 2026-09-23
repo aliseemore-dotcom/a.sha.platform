@@ -222,7 +222,8 @@ async function handle(req, res) {
 
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method Not Allowed');
 
-    if (/^\/(styles|js|fonts)\//.test(url.pathname) && (await serveFile(res, url.pathname))) return;
+    if (url.pathname.startsWith('/fonts/') && (await serveFile(res, url.pathname, 'public, max-age=604800'))) return;
+    if (/^\/(styles|js)\//.test(url.pathname) && (await serveFile(res, url.pathname))) return;
 
     // Страницы приложения. Без сессии — на вход с безопасным returnTo.
     if (url.pathname === '/login') return void (await serveFile(res, 'index.html'));

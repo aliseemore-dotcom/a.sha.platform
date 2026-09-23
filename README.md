@@ -34,7 +34,8 @@ server/
   time.js         календарные операции в поясе рабочего пространства
   demo/seed.js    демо-данные стенда (DEMO=1 по умолчанию; DEMO=0 — пустой сервер)
 web/
-  styles/tokens.css   токены брендбука
+  fonts/              Involve (woff2) + OFL.txt
+  styles/tokens.css   токены брендбука и @font-face
   styles/app.css      экран
   js/views/           events (экран 01), overview (минимальный обзор), login (стенд)
   js/ui/              карточка, строка внимания, диалог «Новая свадьба»
