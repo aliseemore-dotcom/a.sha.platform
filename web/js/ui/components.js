@@ -8,6 +8,33 @@ import {
 const KIND_TONE = { overdue: 'blocked', blocked: 'blocked', due_today: 'soon' };
 
 /**
+ * Добавляет `?from=<путь списка>` к ссылке на проект, чтобы «← Мои мероприятия» на обзоре
+ * возвращал к той же вкладке/поиску/сортировке, а не к списку по умолчанию (обзор проекта,
+ * раздел 1.1). `fromHref` — уже посчитанный путь списка (например, `writeQuery(state)`); при
+ * прямом входе он не передаётся, и ссылка остаётся обычной.
+ */
+export function withFrom(href, fromHref) {
+  return fromHref ? `${href}?from=${encodeURIComponent(fromHref)}` : href;
+}
+
+/**
+ * Одна кликабельная строка задачи: статус → название → детали → стрелка. Вся строка — одна
+ * ссылка, без вложенных интерактивных элементов, с фокусом клавиатуры (общий компонент для
+ * блока внимания на списке проектов и блоков «Требует решения» / «В работе» / «Ждём ответа»
+ * в обзоре проекта).
+ */
+export function taskRow({ href, tone, chipLabel, title, meta, tooltip }) {
+  return h('li', { class: 'attention-row' },
+    h('a', { href, class: 'attention-row__link', title: tooltip, 'aria-label': tooltip },
+      statusChip(tone, chipLabel),
+      h('span', { class: 'attention-row__title' }, title),
+      h('span', { class: 'attention-row__meta' }, meta),
+      h('span', { class: 'attention-row__arrow', 'aria-hidden': 'true' }, '→'),
+    ),
+  );
+}
+
+/**
  * Метка статуса: слово + форма; цвет вторичен (брендбук, «Статусы, метки, дата»).
  * `size: 'detail'` — чуть крупнее вариант для одиночного статуса в детальной панели задачи
  * (часть II §1); в плотных списках используется размер по умолчанию.
@@ -24,19 +51,15 @@ export function statusChip(tone, text, { size, ...attrs } = {}) {
  * Строка внимания — одна ссылка на конкретную задачу, без вложенных интерактивных элементов.
  * Порядок: статус → задача → проект · ответственный.
  */
-export function attentionRow(item, timeZone, now) {
+export function attentionRow(item, timeZone, now, fromHref) {
   const { label, detail } = attentionLabel(item, timeZone, now);
   const owner = item.ownerName ?? 'Не назначен';
   const meta = `${item.eventTitle} · ${owner}`;
   const full = [label, item.title, meta, detail].filter(Boolean).join('. ');
-  return h('li', { class: 'attention-row' },
-    h('a', { href: item.targetUrl, class: 'attention-row__link', title: full, 'aria-label': full },
-      statusChip(KIND_TONE[item.kind], label),
-      h('span', { class: 'attention-row__title' }, item.title),
-      h('span', { class: 'attention-row__meta' }, meta),
-      h('span', { class: 'attention-row__arrow', 'aria-hidden': 'true' }, '→'),
-    ),
-  );
+  return taskRow({
+    href: withFrom(item.targetUrl, fromHref), tone: KIND_TONE[item.kind], chipLabel: label,
+    title: item.title, meta, tooltip: full,
+  });
 }
 
 function dateBlock(card, timeZone, now) {
@@ -57,8 +80,8 @@ function dateBlock(card, timeZone, now) {
  * Карточка свадьбы. Внутри две ссылки (название и «Открыть проект») и, в архиве, кнопка —
  * поэтому карточка целиком не кликабельна: интерактивные элементы не вкладываются друг в друга.
  */
-export function eventCard(card, { timeZone, now, canArchive, onRestore }) {
-  const href = `/events/${encodeURIComponent(card.id)}/overview`;
+export function eventCard(card, { timeZone, now, canArchive, onRestore, fromHref }) {
+  const href = withFrom(`/events/${encodeURIComponent(card.id)}/overview`, fromHref);
   const titleId = `card-title-${card.id}`;
   const urgent = card.lifecycle === 'active' && card.urgentCount > 0;
   const archived = card.lifecycle === 'archived';

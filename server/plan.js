@@ -37,6 +37,7 @@ export function applyWeddingPlan(store, event, nowIso) {
       dueAt: null,
       dueDate: null,
       followUpAt: null,
+      waitingFrom: null,
       assigneeId: null,
       createdAt: nowIso,
       updatedAt: nowIso,

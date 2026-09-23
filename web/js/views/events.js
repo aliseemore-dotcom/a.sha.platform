@@ -6,13 +6,11 @@ import { api } from '../api.js';
 import { attentionRow, eventCard, cardSkeleton, attentionSkeleton } from '../ui/components.js';
 import { openCreateDialog } from '../ui/createDialog.js';
 import { countWeddings } from '../format.js';
+import { mobileQuery, defaultListLimit as attentionLimit } from '../breakpoints.js';
 
 const SEARCH_DEBOUNCE = 300;
 const MAX_TIMER = 2 ** 31 - 1;
 const ATTENTION_PAGE = 20;
-// Видимых строк внимания до раскрытия: телефон — 3, шире — 5.
-const mobileQuery = window.matchMedia('(max-width: 767px)');
-const attentionLimit = () => (mobileQuery.matches ? 3 : 5);
 
 function readQuery(query) {
   return {
@@ -282,7 +280,7 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
     attentionSlot.append(
       h('section', { class: 'attention', 'aria-labelledby': 'attention-heading', id: 'attention' },
         h('h2', { class: 'attention__title', id: 'attention-heading' }, `Требует внимания · ${total}`),
-        h('ol', { class: 'attention__list', id: 'attention-list' }, rows.map((item) => attentionRow(item, tz, now))),
+        h('ol', { class: 'attention__list', id: 'attention-list' }, rows.map((item) => attentionRow(item, tz, now, writeQuery(state)))),
         attentionError
           ? h('p', { class: 'attention__error', role: 'alert' }, 'Не удалось загрузить список. Попробуйте ещё раз.')
           : null,
@@ -365,7 +363,7 @@ export function renderEvents(slot, { session, navigate, query, restoreScroll }) 
 
     const now = Date.now();
     listSlot.append(h('ul', { class: 'cards' },
-      items.map((card) => eventCard(card, { timeZone: data.timeZone, now, canArchive, onRestore: restore }))));
+      items.map((card) => eventCard(card, { timeZone: data.timeZone, now, canArchive, onRestore: restore, fromHref: writeQuery(state) }))));
 
     if (nextCursor) {
       listSlot.append(h('div', { class: 'list-more' },

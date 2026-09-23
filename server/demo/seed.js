@@ -39,7 +39,7 @@ export function seedDemo(store, now = Date.now()) {
   let n = 0;
   const task = (eventId, title, status, extra = {}) => store.insertTask({
     id: `task_demo_${String(++n).padStart(2, '0')}`, eventId, title, status,
-    dueAt: null, dueDate: null, followUpAt: null, assigneeId: null,
+    dueAt: null, dueDate: null, followUpAt: null, waitingFrom: null, assigneeId: null,
     createdAt: nowIso, updatedAt: iso(now - n * 60_000), ...extra,
   });
 
@@ -56,7 +56,7 @@ export function seedDemo(store, now = Date.now()) {
   task('evt_demo_maria_ilya', 'Отправить подрядчикам финальный тайминг', 'in_progress',
     { dueDate: day(-2), assigneeId: 'usr_olga' });
   task('evt_demo_maria_ilya', 'Согласовать смету с флористом', 'waiting',
-    { dueAt: iso(now - 3 * 3600_000), followUpAt: day(-1), assigneeId: 'usr_elena' });
+    { dueAt: iso(now - 3 * 3600_000), followUpAt: day(-1), waitingFrom: 'Флорист', assigneeId: 'usr_elena' });
   task('evt_demo_maria_ilya', 'Утвердить декор зала', 'blocked', {
     dueDate: day(-1), assigneeId: 'usr_olga', blockedReason: 'Пара ещё не утвердила бюджет на декор',
   });
@@ -65,8 +65,9 @@ export function seedDemo(store, now = Date.now()) {
 
   ev('evt_demo_anna_maxim_2', 'Анна + Максим', null, 'Ресторан «Сад»',
     { createdAt: iso(now - 2 * 86400_000) });
-  task('evt_demo_anna_maxim_2', 'Получить ответ от фотографа', 'waiting', { followUpAt: day(0) });
-  task('evt_demo_anna_maxim_2', 'Получить ответ от кейтеринга', 'waiting', { followUpAt: day(3) });
+  task('evt_demo_anna_maxim_2', 'Получить ответ от фотографа', 'waiting',
+    { followUpAt: day(0), waitingFrom: 'Фотограф', assigneeId: 'usr_elena' });
+  task('evt_demo_anna_maxim_2', 'Получить ответ от кейтеринга', 'waiting', { followUpAt: day(3), waitingFrom: 'Кейтеринг' });
   task('evt_demo_anna_maxim_2', 'Уточнить дату свадьбы', 'planned', { templateKey: 'wedding_v1:01' });
 
   ev('evt_demo_alina_roman', 'Алина + Роман', day(75), 'Отель «Причал»',

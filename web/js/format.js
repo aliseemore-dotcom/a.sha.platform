@@ -54,6 +54,7 @@ export function dateTimeIn(ms, timeZone) {
 
 /** «через 34 дня», «сегодня», «завтра»; для прошедших дат — null (отрицательный отсчёт не показываем). */
 export function relativeDay(date, timeZone, now = Date.now()) {
+  if (!date) return null;
   const diff = daysBetween(localDate(now, timeZone), date);
   if (diff < 0) return null;
   if (diff === 0) return 'сегодня';

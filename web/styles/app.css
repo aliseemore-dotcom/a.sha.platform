@@ -3,7 +3,8 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
 body {
   margin: 0;
@@ -326,6 +327,14 @@ a { color: inherit; }
 .skeleton--heading { height: 28px; width: 45%; }
 .skeleton--row { height: 44px; }
 
+/* Строки внимания внутри пары «В работе»/«Ждём ответа» вдвое уже страницы — широкая раскладка
+   в 4 колонки включается по ширине экрана (медиа-запрос выше), а не по ширине контейнера, и на
+   такой узкой колонке сжимала название задачи. Более высокая специфичность держит их в столбик. */
+.zones .attention-row__link {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "chip arrow" "title arrow" "meta arrow";
+}
+
 /* Светлый вариант списка — внутри обзора проекта */
 .attention__list--light .attention-row + .attention-row { border-top-color: var(--line-soft); }
 .attention__list--light .attention-row__link:hover { background: var(--surface-muted); }
@@ -621,13 +630,24 @@ a { color: inherit; }
 
 .back { margin-bottom: var(--space-3); }
 .back a { display: inline-flex; min-height: 44px; align-items: center; }
-.overview-head {
-  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-2);
-  margin-bottom: var(--space-4);
+
+.overview-head { margin-bottom: var(--space-3); }
+.overview-cover {
+  display: block; width: 100%; max-height: 220px; object-fit: cover;
+  border-radius: var(--radius-card); margin-bottom: var(--space-2);
+}
+.overview-head__row {
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-2);
 }
 .overview-head .overline { margin-bottom: var(--space-1); }
+.overview-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2);
+  margin-top: var(--space-2);
+}
+.overview-meta__text { overflow-wrap: anywhere; }
+.overview-meta__rel { color: var(--ink-secondary); }
 
-/* margin-left: auto держит меню у правого края даже когда .overview-head переносит его
+/* margin-left: auto держит меню у правого края даже когда .overview-head__row переносит его
    на отдельную строку (единственный элемент строки при flex-wrap иначе прижимается к началу) */
 .project-menu { position: relative; flex: none; margin-left: auto; }
 .project-menu__toggle { font-size: 20px; letter-spacing: 1px; }
@@ -648,6 +668,27 @@ a { color: inherit; }
   background: transparent; font-weight: 500; cursor: pointer;
 }
 .project-menu__item:hover { background: var(--surface-muted); }
+
+/* Краткие числа (обзор проекта §1.2): каждое — переход к своему разделу, не отдельная метрика */
+.stat-row {
+  display: flex; gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  overflow-x: auto;
+}
+.stat {
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  min-height: 64px; min-width: 96px;
+  padding: var(--space-1) var(--space-2);
+  background: var(--surface-white);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-button);
+  text-decoration: none; color: var(--ink-primary);
+  flex: 1 1 0;
+}
+.stat:hover { border-color: var(--line-strong); }
+.stat__num { font-size: var(--fs-heading); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stat__label { font-size: var(--fs-caption); color: var(--ink-secondary); }
+
 .zones { display: grid; gap: var(--space-3); margin-bottom: var(--space-3); }
 @media (min-width: 1024px) { .zones { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
 .zone {
@@ -655,9 +696,16 @@ a { color: inherit; }
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-card);
   padding: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 .zone:focus { outline: 2px solid var(--ink-primary); outline-offset: 2px; }
 .zone__title { font-size: var(--fs-heading); font-weight: 700; margin-bottom: var(--space-2); }
+.zone__head {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-2);
+}
+.zone__head .zone__title { margin-bottom: 0; }
+#section-requires .attention__controls,
+#section-requires .btn--small { margin-top: var(--space-2); }
 .plan-group + .plan-group { margin-top: var(--space-3); }
 .plan-group .overline { margin-bottom: var(--space-1); }
 .plan-item {
@@ -679,6 +727,7 @@ a { color: inherit; }
   display: grid; gap: var(--space-2);
 }
 .task-panel:focus { outline: 2px solid var(--ink-primary); outline-offset: 2px; }
+.task-panel__project-link { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .task-panel__title { font-size: var(--fs-heading); font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
 .task-panel__chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .task-panel__facts { margin: 0; display: grid; gap: var(--space-1); }

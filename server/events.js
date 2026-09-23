@@ -200,6 +200,7 @@ function publicTask(ctx, t) {
     dueAt: t.dueAt ?? null,
     dueDate: t.dueDate ?? null,
     followUpAt: t.followUpAt ?? null,
+    waitingFrom: t.waitingFrom ?? null,
     assigneeName: ctx.store.getUser(t.assigneeId)?.name ?? null,
     blockedReason: t.blockedReason ?? null,
     templateKey: t.templateKey ?? null,
