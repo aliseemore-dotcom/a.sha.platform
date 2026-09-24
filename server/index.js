@@ -15,6 +15,7 @@ import {
 import {
   listTasks, createTask, getTask, updateTask, completeTask, restoreTask as restoreTaskAction,
 } from './tasks.js';
+import { getChecklist, addChecklistItems } from './checklist.js';
 import { ServiceError } from './errors.js';
 import { hasPermission } from './access.js';
 import { isValidTimeZone } from './time.js';
@@ -203,6 +204,13 @@ async function handleApi(req, res, url) {
       const result = createTask(ctx, eventId, await readJson(req));
       return json(res, 201, result);
     }
+  }
+
+  const checklist = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/checklist$/);
+  if (checklist) {
+    const [, eventId] = checklist;
+    if (method === 'GET') return json(res, 200, getChecklist(ctx, eventId));
+    if (method === 'POST') return json(res, 200, addChecklistItems(ctx, eventId, await readJson(req)));
   }
 
   const m = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})(?:\/(archive|restore|plan))?$/);

@@ -5,7 +5,6 @@ import {
   buildAttention, publicAttentionItem, activePreview, nextChangeAt,
 } from './attention.js';
 import { visibleEvents, canSeeEvent, hasPermission } from './access.js';
-import { applyWeddingPlan } from './plan.js';
 import { isValidDate, localDate } from './time.js';
 import { publicTask, assignableUsers } from './tasks.js';
 import { ServiceError } from './errors.js';
@@ -230,6 +229,11 @@ export function validateCreate(body) {
   return { title, eventDate, locationName, idempotencyKey: key };
 }
 
+// Раньше сюда автоматически подставлялся стартовый план wedding_v1 (server/plan.js). Теперь
+// набор задач организатор выбирает сам в панели «Добавить задачи» (server/checklist.js) —
+// при создании проекта задачи больше не добавляются автоматически, planStatus сразу «ready».
+const noPlan = () => {};
+
 function runPlan(ctx, event, applyPlan) {
   try {
     applyPlan(ctx.store, event, new Date(ctx.now).toISOString());
@@ -241,7 +245,7 @@ function runPlan(ctx, event, applyPlan) {
   return ctx.store.getEvent(event.id).planStatus;
 }
 
-export function createEvent(ctx, body, { applyPlan = applyWeddingPlan } = {}) {
+export function createEvent(ctx, body, { applyPlan = noPlan } = {}) {
   if (!hasPermission(ctx.user, 'event:create')) {
     throw new ServiceError(403, 'forbidden', 'Нет права создавать проекты');
   }
@@ -278,7 +282,7 @@ export function createEvent(ctx, body, { applyPlan = applyWeddingPlan } = {}) {
   return { eventId: event.id, planStatus };
 }
 
-export function retryPlan(ctx, eventId, { applyPlan = applyWeddingPlan } = {}) {
+export function retryPlan(ctx, eventId, { applyPlan = noPlan } = {}) {
   const event = ctx.store.getEvent(eventId);
   if (!canSeeEvent(ctx.user, event)) throw notFound();
   if (!hasPermission(ctx.user, 'event:create')) {

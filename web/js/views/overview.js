@@ -9,6 +9,7 @@ import { api } from '../api.js';
 import {
   statusChip, taskRow, withFrom, safeListPath,
 } from '../ui/components.js';
+import { openChecklistPanel } from '../ui/checklistPanel.js';
 import {
   fullDate, dateTimeIn, attentionLabel, projectStage, relativeDay, pluralize,
 } from '../format.js';
@@ -330,6 +331,14 @@ export function renderOverview(slot, { params, session, query }) {
     );
 
     const menu = canArchive ? projectMenu(event) : null;
+    const addTasksBtn = !archived ? h('button', {
+      type: 'button', class: 'btn btn--secondary',
+      onclick: (e) => openChecklistPanel({
+        opener: e.currentTarget,
+        eventId: event.id,
+        onAdded: () => { announce('Задачи добавлены', 0); load(); },
+      }),
+    }, 'Добавить задачи') : null;
 
     // main.append — нативный Element.append, а не наш h()-хелпер: null стал бы текстом "null"
     // вместо того, чтобы просто отсутствовать, поэтому пустые слоты отфильтровываются явно.
@@ -343,7 +352,7 @@ export function renderOverview(slot, { params, session, query }) {
             h('p', { class: 'overline' }, 'Свадьба'),
             h('h1', { class: 'page-title' }, event.title),
           ),
-          menu,
+          h('div', { class: 'overview-head__actions' }, addTasksBtn, menu),
         ),
         h('div', { class: 'overview-meta' },
           statusChip(stage.tone, stage.label),

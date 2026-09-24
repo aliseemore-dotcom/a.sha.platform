@@ -661,9 +661,10 @@ a { color: inherit; }
 .overview-meta__text { overflow-wrap: anywhere; }
 .overview-meta__rel { color: var(--ink-secondary); }
 
-/* margin-left: auto держит меню у правого края даже когда .overview-head__row переносит его
-   на отдельную строку (единственный элемент строки при flex-wrap иначе прижимается к началу) */
-.project-menu { position: relative; flex: none; margin-left: auto; }
+/* margin-left: auto держит блок действий у правого края даже когда .overview-head__row
+   переносит его на отдельную строку (единственный элемент иначе прижимается к началу) */
+.overview-head__actions { display: flex; align-items: center; gap: var(--space-1); margin-left: auto; }
+.project-menu { position: relative; flex: none; }
 .project-menu__toggle { font-size: 20px; letter-spacing: 1px; }
 .project-menu__panel {
   position: absolute; right: 0; top: calc(100% + var(--space-1)); z-index: 20;
@@ -821,3 +822,24 @@ a { color: inherit; }
 .field-row { display: flex; gap: var(--space-1); }
 .field-row .field { flex: 1; min-width: 0; }
 textarea.input { min-height: 88px; padding: var(--space-1) var(--space-2); resize: vertical; }
+
+/* ---------- панель «Добавить задачи» ---------- */
+
+.checklist-dialog .dialog__body { display: block; }
+.checklist-note { margin: 0 0 var(--space-2); }
+.checklist-groups { display: grid; gap: var(--space-3); }
+.checklist-group__title { margin-bottom: var(--space-1); }
+.checklist-list { display: grid; gap: var(--space-1); }
+.checklist-item {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+  min-height: 44px;
+}
+.checklist-item--added { color: var(--ink-secondary); }
+.checklist-item__check { margin: 0; min-height: 0; }
+.checklist-item__status { font-size: var(--fs-caption); }
+.checklist-item__date { width: 160px; }
+@media (max-width: 479px) {
+  .checklist-item { flex-direction: column; align-items: flex-start; }
+  .checklist-item__date { width: 100%; }
+}

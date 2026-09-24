@@ -193,10 +193,19 @@ test('7. создание без даты; ошибка без названия;
     (e) => e.fields.locationName === 'Не более 150 символов');
 });
 
-test('план wedding_v1: 12 задач без даты свадьбы, 11 с датой; все planned без срока и ответственного', () => {
+test('создание проекта больше не добавляет задачи автоматически — набор выбирается в панели «Добавить задачи»', () => {
   const { ctx, owner } = setup();
-  const noDate = createEvent(ctx(owner), { title: 'А', idempotencyKey: 'key-plan-0001' });
-  const withDate = createEvent(ctx(owner), { title: 'Б', eventDate: '2027-06-14', idempotencyKey: 'key-plan-0002' });
+  const created = createEvent(ctx(owner), { title: 'А', idempotencyKey: 'key-plan-0001' });
+  assert.equal(created.planStatus, 'ready');
+  const tasks = getEvent(ctx(owner), created.eventId).tasks;
+  assert.equal(tasks.length, 0);
+  assert.equal(listEvents(ctx(owner)).attentionTotal, 0);
+});
+
+test('applyWeddingPlan (бывший стартовый план) по-прежнему доступен для явного вызова, но не запускается автоматически', () => {
+  const { ctx, owner } = setup();
+  const noDate = createEvent(ctx(owner), { title: 'А', idempotencyKey: 'key-plan-0002' }, { applyPlan: applyWeddingPlan });
+  const withDate = createEvent(ctx(owner), { title: 'Б', eventDate: '2027-06-14', idempotencyKey: 'key-plan-0003' }, { applyPlan: applyWeddingPlan });
   const t1 = getEvent(ctx(owner), noDate.eventId).tasks;
   const t2 = getEvent(ctx(owner), withDate.eventId).tasks;
   assert.equal(t1.length, 12);
@@ -204,8 +213,6 @@ test('план wedding_v1: 12 задач без даты свадьбы, 11 с �
   assert.ok(t1.some((t) => t.templateKey === 'wedding_v1:01'));
   assert.ok(!t2.some((t) => t.templateKey === 'wedding_v1:01'));
   assert.ok(t1.every((t) => t.status === 'todo'));
-  // Стартовый план не создаёт сигналов внимания
-  assert.equal(listEvents(ctx(owner)).attentionTotal, 0);
 });
 
 test('8. сбой плана не удаляет проект; повтор идемпотентен и не трогает правки', () => {
@@ -228,8 +235,8 @@ test('8. сбой плана не удаляет проект; повтор ид
   const edited = before.find((t) => t.templateKey === 'wedding_v1:02');
   store.updateTask(edited.id, { title: 'Бриф — своя формулировка', status: 'in_progress' });
 
-  assert.equal(retryPlan(ctx(owner), res.eventId).planStatus, 'ready');
-  assert.equal(retryPlan(ctx(owner), res.eventId).planStatus, 'ready');
+  assert.equal(retryPlan(ctx(owner), res.eventId, { applyPlan: applyWeddingPlan }).planStatus, 'ready');
+  assert.equal(retryPlan(ctx(owner), res.eventId, { applyPlan: applyWeddingPlan }).planStatus, 'ready');
   const after = getEvent(ctx(owner), res.eventId).tasks;
   assert.equal(after.length, 12);
   assert.equal(new Set(after.map((t) => t.templateKey)).size, 12);

@@ -43,7 +43,7 @@ export function blankTaskFields() {
 // ---------- доступ ----------
 
 /** Мутировать задачи может любой, кто видит проект, пока проект активен (архив — история, read-only). */
-function requireMutable(user, event) {
+export function requireMutable(user, event) {
   if (!canSeeEvent(user, event)) throw notFound();
   if (event.lifecycle !== 'active') {
     throw new ServiceError(409, 'archived', 'Проект в архиве — задачи доступны только для просмотра');

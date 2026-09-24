@@ -68,6 +68,9 @@ export const api = {
   getTask: (eventId, taskId, opts) => request('GET',
     `/api/events/${encodeURIComponent(eventId)}/tasks/${encodeURIComponent(taskId)}`, undefined, opts),
   createTask: (eventId, body) => request('POST', `/api/events/${encodeURIComponent(eventId)}/tasks`, body),
+
+  getChecklist: (eventId, opts) => request('GET', `/api/events/${encodeURIComponent(eventId)}/checklist`, undefined, opts),
+  addChecklistItems: (eventId, body) => request('POST', `/api/events/${encodeURIComponent(eventId)}/checklist`, body),
   updateTask: (eventId, taskId, body) => request('PATCH',
     `/api/events/${encodeURIComponent(eventId)}/tasks/${encodeURIComponent(taskId)}`, body),
 };
