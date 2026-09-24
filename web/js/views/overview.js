@@ -1,25 +1,20 @@
-// Обзор мероприятия (спецификация v1): организатор за секунды видит, что требует решения,
-// что реально выполняется и где ждём ответа, и переходит к нужной задаче. Использует те же
-// компоненты и функцию срочности, что и «Мои мероприятия», чтобы число и статус совпадали.
+// Обзор мероприятия (спецификация v2): организатор за короткое время видит, что требует
+// внимания, что реально выполняется и где ждём ответа, и переходит к нужной задаче. Каждая
+// задача показывается на странице ровно один раз — приоритет размещения «Требует внимания» →
+// «Ждём ответа» → «В работе» (§0). Использует те же компоненты и функцию срочности, что и
+// «Мои мероприятия», чтобы число и статус совпадали.
 
 import { h, clear, announce } from '../dom.js';
 import { api } from '../api.js';
-import { attentionRow, statusChip, taskRow, withFrom } from '../ui/components.js';
 import {
-  fullDate, dateTimeIn, attentionLabel, projectStage, relativeDay,
+  statusChip, taskRow, withFrom, safeListPath,
+} from '../ui/components.js';
+import {
+  fullDate, dateTimeIn, attentionLabel, projectStage, relativeDay, pluralize,
 } from '../format.js';
 import { defaultListLimit } from '../breakpoints.js';
+import { STATUS_WORD, CLOSED_STATUSES } from '../taskStatus.js';
 
-const STATUS_WORD = {
-  planned: ['planned', 'Запланировано'],
-  in_progress: ['progress', 'В работе'],
-  waiting: ['soon', 'Ждём ответа'],
-  blocked: ['blocked', 'Заблокировано'],
-  done: ['done', 'Готово'],
-  cancelled: ['planned', 'Отменено'],
-};
-
-const CLOSED = new Set(['done', 'cancelled']);
 const KIND_TONE = { overdue: 'blocked', blocked: 'blocked', due_today: 'soon' };
 
 function dueText(task, timeZone) {
@@ -34,21 +29,51 @@ function shortDue(task, timeZone) {
   return null;
 }
 
-/** Только внутренние пути списка: `/events...`, не открытый редирект и не JS-адрес. */
-function safeListPath(value) {
-  if (typeof value !== 'string' || !value.startsWith('/events') || value.startsWith('//') || value.includes('\\')) {
-    return null;
-  }
-  return value;
-}
-
 function dueSort(a, b) {
   const da = a.dueAt ? Date.parse(a.dueAt) : a.dueDate ? Date.parse(`${a.dueDate}T23:59:59`) : null;
   const db = b.dueAt ? Date.parse(b.dueAt) : b.dueDate ? Date.parse(`${b.dueDate}T23:59:59`) : null;
-  if (da === db) return 0;
+  if (da === db) return a.id < b.id ? -1 : 1; // стабильно по id при равном сроке (в т.ч. без срока)
   if (da === null) return 1;
   if (db === null) return -1;
   return da - db;
+}
+
+const rowId = (taskId) => `task-row-${taskId}`;
+
+/**
+ * Прокручивает к строке (или к разделу, если строк несколько), временно подсвечивает её и
+ * переводит туда фокус клавиатуры/скринридера. Сделано обычным JS, а не ссылкой на #якорь:
+ * нативная прокрутка к фрагменту здесь ненадёжна — в этом окружении `:target` ни разу не
+ * сработал для содержимого внутри корневого узла приложения ни в одном браузере, которым мы
+ * это проверяли, притом что тот же CSS исправно работает для элементов вне этого узла.
+ */
+function scrollAndHighlight(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const isRow = el.classList.contains('attention-row');
+  el.scrollIntoView({ behavior: 'smooth', block: isRow ? 'center' : 'start' });
+  if (isRow) {
+    el.classList.add('attention-row--flash');
+    setTimeout(() => el.classList.remove('attention-row--flash'), 2000);
+    el.querySelector('.attention-row__link')?.focus({ preventScroll: true });
+  } else {
+    el.focus({ preventScroll: true }); // разделы (.zone) уже tabindex="-1" для этого
+  }
+}
+
+/**
+ * «Ещё N задач(и) — в „Требует внимания“»: одна задача — прокрутка и подсветка именно её
+ * строки (§0 «прокручивает и выделяет нужную строку сверху»); несколько — прокрутка к самому
+ * блоку, без попытки подсветить сразу несколько строк.
+ */
+function shownAboveNote(hiddenTasks) {
+  if (!hiddenTasks.length) return null;
+  const n = hiddenTasks.length;
+  const targetId = n === 1 ? rowId(hiddenTasks[0].id) : 'section-requires';
+  return h('p', { class: 'shown-above' },
+    `Ещё ${n} ${pluralize(n, 'задача', 'задачи', 'задач')} — в `,
+    h('button', { type: 'button', class: 'link-button', onclick: () => scrollAndHighlight(targetId) }, '«Требует внимания»'),
+    ' выше.');
 }
 
 export function renderOverview(slot, { params, session, query }) {
@@ -58,6 +83,7 @@ export function renderOverview(slot, { params, session, query }) {
   const backToList = safeListPath(query.get('from')) ?? '/events';
   const overviewUrl = withFrom(`/events/${encodeURIComponent(params.eventId)}/overview`, query.get('from'));
   const taskUrl = (id) => withFrom(`/events/${encodeURIComponent(params.eventId)}/tasks/${encodeURIComponent(id)}`, query.get('from'));
+  const allTasksUrl = withFrom(`/events/${encodeURIComponent(params.eventId)}/tasks`, query.get('from'));
   const canArchive = session.user.role === 'owner';
   const canRetryPlan = session.permissions.createEvent;
 
@@ -114,15 +140,16 @@ export function renderOverview(slot, { params, session, query }) {
 
     const rows = [
       ['Проект', event.title],
-      due ? ['Срок', due] : null,
+      due ? ['Срок выполнения', due] : null,
       ['Ответственный', task.assigneeName ?? 'Не назначен'],
       task.section ? ['Раздел', task.section] : null,
       task.blockedReason ? ['Причина блокировки', task.blockedReason] : null,
       task.status === 'waiting' && task.waitingFrom ? ['Ждём от', task.waitingFrom] : null,
-      task.status === 'waiting' && task.followUpAt ? ['Контрольная дата', fullDate(task.followUpAt.slice(0, 10))] : null,
+      // Контроль ожидания — отдельная дата от срока выполнения, не смешивается с «Просрочено» (§1.2).
+      task.status === 'waiting' && task.followUpAt ? ['Контроль ожидания', fullDate(task.followUpAt.slice(0, 10))] : null,
     ].filter(Boolean);
 
-    const canComplete = !CLOSED.has(task.status) && event.lifecycle === 'active';
+    const canComplete = !CLOSED_STATUSES.has(task.status) && event.lifecycle === 'active';
     const completeBtn = canComplete
       ? h('button', {
         type: 'button', class: 'btn btn--primary',
@@ -202,58 +229,90 @@ export function renderOverview(slot, { params, session, query }) {
 
   // ---------- разделы обзора ----------
 
-  /** «Требует решения»: та же функция срочности, что на «Мои мероприятия» — число и статус совпадают. */
-  function requiresSection(attention, archived, timeZone, now) {
+  /**
+   * «Требует внимания»: та же функция срочности, что на «Мои мероприятия» — число и статус
+   * совпадают. У задачи, которая одновременно in_progress/waiting, — маленький второй бейдж,
+   * чтобы её не пришлось повторять строкой в блоке «В работе»/«Ждём ответа» ниже (§0, §2.3).
+   */
+  function requiresSection(attention, tasksById, archived, timeZone, now) {
     const limit = defaultListLimit();
     const rows = requiresExpanded ? attention : attention.slice(0, limit);
     const toggle = attention.length > limit
       ? h('button', {
         type: 'button', class: 'btn btn--secondary btn--small',
         'aria-expanded': String(requiresExpanded),
-        onclick: () => { requiresExpanded = !requiresExpanded; renderFrom(lastData); },
+        onclick: () => { requiresExpanded = !requiresExpanded; render(lastData); },
       }, requiresExpanded ? 'Свернуть' : `Показать все ${attention.length}`)
       : null;
     return h('section', {
       class: 'zone', id: 'section-requires', 'aria-labelledby': 'zone-requires', tabindex: '-1',
     },
-      h('h2', { class: 'zone__title', id: 'zone-requires' }, `Требует решения${attention.length ? ` · ${attention.length}` : ''}`),
+      h('h2', { class: 'zone__title', id: 'zone-requires' }, `Требует внимания${attention.length ? ` · ${attention.length}` : ''}`),
       attention.length
-        ? [h('ol', { class: 'attention__list attention__list--light' }, rows.map((i) => attentionRow(i, timeZone, now))), toggle]
-        : h('p', { class: 'muted' }, archived ? 'Проект в архиве' : 'Сейчас нет задач, требующих срочного решения'),
+        ? [h('ol', { class: 'attention__list attention__list--light' }, rows.map((item) => {
+          const { label, detail } = attentionLabel(item, timeZone, now);
+          const owner = item.ownerName ?? 'Не назначен';
+          const task = tasksById.get(item.id);
+          let secondary = null;
+          if (task?.status === 'in_progress') secondary = statusChip('progress', 'В работе');
+          else if (task?.status === 'waiting') {
+            secondary = statusChip('soon', task.waitingFrom ? `Ждём: ${task.waitingFrom}` : 'Ждём ответа');
+          }
+          const tooltip = [label, item.title, owner, detail].filter(Boolean).join('. ');
+          return taskRow({
+            id: rowId(item.id), href: taskUrl(item.id), tone: KIND_TONE[item.kind], chipLabel: label,
+            title: item.title, meta: owner, tooltip, secondary,
+          });
+        })), toggle]
+        : h('p', { class: 'muted' }, archived ? 'Проект в архиве' : 'Сейчас нет задач, требующих срочного действия'),
     );
   }
 
-  /** «Сейчас в работе»: только in_progress; следующее действие не придумывается, если его нет в данных. */
-  function workSection(tasks, timeZone) {
-    const rows = tasks
-      .filter((t) => t.status === 'in_progress')
-      .sort((a, b) => dueSort(a, b) || (a.updatedAt < b.updatedAt ? 1 : -1));
-    return h('section', { class: 'zone', id: 'section-work', 'aria-labelledby': 'zone-work', tabindex: '-1' },
-      h('h2', { class: 'zone__title', id: 'zone-work' }, `В работе${rows.length ? ` · ${rows.length}` : ''}`),
-      rows.length
-        ? h('ol', { class: 'attention__list attention__list--light' }, rows.map((t) => {
+  /** Разбивает задачи одного статуса на «свои» строки и уже показанные выше — считается один раз в render(). */
+  function splitByStatus(tasks, status, requiresIds) {
+    const all = tasks.filter((t) => t.status === status);
+    return { all, rows: all.filter((t) => !requiresIds.has(t.id)), hidden: all.filter((t) => requiresIds.has(t.id)) };
+  }
+
+  /**
+   * «В работе»: только in_progress, не показанные выше в «Требует внимания» (§0, §2.4).
+   * Следующее действие не придумывается, если его нет в данных.
+   */
+  function workSection({ all, rows, hidden }, timeZone) {
+    let body;
+    if (!all.length) body = h('p', { class: 'muted' }, 'Пока нет задач в работе');
+    else if (!rows.length) body = shownAboveNote(hidden);
+    else {
+      body = [
+        h('ol', { class: 'attention__list attention__list--light' }, rows.sort(dueSort).map((t) => {
           const due = shortDue(t, timeZone);
           const meta = [t.assigneeName ?? 'Не назначен', due].filter(Boolean).join(' · ');
           return taskRow({
             href: taskUrl(t.id), tone: 'progress', chipLabel: 'В работе', title: t.title, meta,
             tooltip: [t.title, meta].join('. '),
           });
-        }))
-        : h('p', { class: 'muted' }, 'Пока нет задач в работе'),
+        })),
+        shownAboveNote(hidden),
+      ];
+    }
+    return h('section', { class: 'zone', id: 'section-work', 'aria-labelledby': 'zone-work', tabindex: '-1' },
+      h('h2', { class: 'zone__title', id: 'zone-work' }, `В работе${all.length ? ` · ${all.length}` : ''}`),
+      body,
     );
   }
 
   /**
-   * «Ждём ответа»: только явный статус waiting. «Ждём ответа от …» — только если источник
-   * (waitingFrom) есть в данных; контрольная дата — только если хранится followUpAt.
-   * Не путать со статусом «Заблокировано» и не выводить «Нужно напомнить» самостоятельно.
+   * «Ждём ответа»: только явный статус waiting, не показанные выше (§0, §2.5). «Ждём: …» — только
+   * если источник (waitingFrom) есть в данных; контроль ожидания — только если хранится followUpAt
+   * и не путается со сроком выполнения самой задачи. «Нужно напомнить» не выводится самостоятельно.
    */
-  function waitingSection(tasks, timeZone) {
-    const rows = tasks.filter((t) => t.status === 'waiting');
-    return h('section', { class: 'zone', id: 'section-waiting', 'aria-labelledby': 'zone-waiting', tabindex: '-1' },
-      h('h2', { class: 'zone__title', id: 'zone-waiting' }, `Ждём ответа${rows.length ? ` · ${rows.length}` : ''}`),
-      rows.length
-        ? h('ol', { class: 'attention__list attention__list--light' }, rows.map((t) => {
+  function waitingSection({ all, rows, hidden }, timeZone) {
+    let body;
+    if (!all.length) body = h('p', { class: 'muted' }, 'Сейчас никого не ждём');
+    else if (!rows.length) body = shownAboveNote(hidden);
+    else {
+      body = [
+        h('ol', { class: 'attention__list attention__list--light' }, rows.map((t) => {
           const chipLabel = t.waitingFrom ? `Ждём: ${t.waitingFrom}` : 'Ждём ответа';
           const meta = [
             `Ответственный: ${t.assigneeName ?? 'Не назначен'}`,
@@ -263,66 +322,35 @@ export function renderOverview(slot, { params, session, query }) {
             href: taskUrl(t.id), tone: 'soon', chipLabel, title: t.title, meta,
             tooltip: [chipLabel, t.title, meta].join('. '),
           });
-        }))
-        : h('p', { class: 'muted' }, 'Сейчас никого не ждём'),
-    );
-  }
-
-  /** Компактное превью ≤5 самых релевантных незавершённых задач — не повтор всей таблицы. */
-  function previewSection(tasks, requiresIds) {
-    const rank = (t) => (requiresIds.has(t.id) ? 0 : t.status === 'in_progress' ? 1 : t.status === 'waiting' ? 2 : 3);
-    const rows = tasks
-      .filter((t) => !CLOSED.has(t.status))
-      .sort((a, b) => rank(a) - rank(b) || dueSort(a, b))
-      .slice(0, 5);
-    return h('section', { class: 'zone', 'aria-labelledby': 'zone-preview' },
-      h('div', { class: 'zone__head' },
-        h('h2', { class: 'zone__title', id: 'zone-preview' }, 'Ближайшие задачи'),
-        tasks.length ? h('a', { class: 'link', href: '#all-tasks' }, 'Все задачи →') : null,
-      ),
-      rows.length
-        ? h('ul', { class: 'plan-list' }, rows.map((t) => {
-          const [tone, word] = STATUS_WORD[t.status] ?? ['planned', t.status];
-          return h('li', { class: 'plan-item' },
-            h('a', { href: taskUrl(t.id), class: 'plan-item__link' }, t.title),
-            statusChip(tone, word));
-        }))
-        : h('p', { class: 'muted' }, tasks.length ? 'Все задачи выполнены или отменены' : 'Задач пока нет'),
-    );
-  }
-
-  function allTasksSection(tasks, focusTaskId) {
-    const bySection = new Map();
-    for (const t of tasks) {
-      const key = t.section ?? 'Прочее';
-      if (!bySection.has(key)) bySection.set(key, []);
-      bySection.get(key).push(t);
+        })),
+        shownAboveNote(hidden),
+      ];
     }
-    return h('section', { class: 'zone', id: 'all-tasks', 'aria-labelledby': 'zone-all', tabindex: '-1' },
-      h('h2', { class: 'zone__title', id: 'zone-all' }, 'Все задачи'),
-      tasks.length
-        ? [...bySection].map(([section, list]) => h('div', { class: 'plan-group' },
-          h('h3', { class: 'overline' }, section),
-          h('ul', { class: 'plan-list' }, list.map((t) => {
-            const [tone, word] = STATUS_WORD[t.status] ?? ['planned', t.status];
-            return h('li', { class: `plan-item${t.id === focusTaskId ? ' plan-item--focus' : ''}` },
-              h('a', { href: taskUrl(t.id), class: 'plan-item__link', 'aria-current': t.id === focusTaskId ? 'true' : null }, t.title),
-              statusChip(tone, word));
-          }))))
-        : h('p', { class: 'muted' }, 'Задач пока нет'),
+    return h('section', { class: 'zone', id: 'section-waiting', 'aria-labelledby': 'zone-waiting', tabindex: '-1' },
+      h('h2', { class: 'zone__title', id: 'zone-waiting' }, `Ждём ответа${all.length ? ` · ${all.length}` : ''}`),
+      body,
     );
+  }
+
+  /**
+   * Показатель-переход (§2.2): ведёт к своему блоку; если в нём не осталось собственных строк
+   * (все задачи уже показаны в «Требует внимания»), прокручивает и подсвечивает первую из них.
+   */
+  function statLink(count, label, sectionId, split) {
+    const onclick = split && !split.rows.length && split.hidden.length
+      ? () => scrollAndHighlight(rowId(split.hidden[0].id))
+      : () => scrollAndHighlight(sectionId);
+    return h('button', { type: 'button', class: 'stat', onclick },
+      h('span', { class: 'stat__num' }, count), h('span', { class: 'stat__label' }, label));
   }
 
   // ---------- сборка страницы ----------
 
   let lastData = null;
 
-  function renderFrom(data) {
-    render(data);
-  }
-
-  function render({ event, attention, tasks, timeZone }) {
-    lastData = { event, attention, tasks, timeZone };
+  function render(data) {
+    const { event, attention, tasks, timeZone } = data;
+    lastData = data;
     clear(main);
     main.removeAttribute('aria-busy');
     const task = taskId ? tasks.find((t) => t.id === taskId) : null;
@@ -367,19 +395,18 @@ export function renderOverview(slot, { params, session, query }) {
     const rel = event.eventDate && event.lifecycle === 'active' ? relativeDay(event.eventDate, timeZone, now) : null;
     const metaText = [dateText, event.locationName].filter(Boolean).join(' · ');
 
-    const inProgressCount = tasks.filter((t) => t.status === 'in_progress').length;
-    const waitingCount = tasks.filter((t) => t.status === 'waiting').length;
+    const requiresIds = new Set(attention.map((i) => i.id));
+    const tasksById = new Map(tasks.map((t) => [t.id, t]));
+    const work = splitByStatus(tasks, 'in_progress', requiresIds);
+    const waiting = splitByStatus(tasks, 'waiting', requiresIds);
+
     const statRow = h('nav', { class: 'stat-row', 'aria-label': 'Сводка по проекту' },
-      h('a', { class: 'stat', href: '#section-requires' },
-        h('span', { class: 'stat__num' }, attention.length), h('span', { class: 'stat__label' }, 'Срочно решить')),
-      h('a', { class: 'stat', href: '#section-work' },
-        h('span', { class: 'stat__num' }, inProgressCount), h('span', { class: 'stat__label' }, 'В работе')),
-      h('a', { class: 'stat', href: '#section-waiting' },
-        h('span', { class: 'stat__num' }, waitingCount), h('span', { class: 'stat__label' }, 'Ждём ответа')),
+      statLink(attention.length, 'Требует внимания', 'section-requires', null),
+      statLink(work.all.length, 'В работе', 'section-work', work),
+      statLink(waiting.all.length, 'Ждём ответа', 'section-waiting', waiting),
     );
 
     const menu = canArchive ? projectMenu(event) : null;
-    const requiresIds = new Set(attention.map((i) => i.id));
 
     // main.append — нативный Element.append, а не наш h()-хелпер: null стал бы текстом "null"
     // вместо того, чтобы просто отсутствовать, поэтому пустые слоты отфильтровываются явно.
@@ -403,10 +430,9 @@ export function renderOverview(slot, { params, session, query }) {
       ),
       statRow,
       taskSection,
-      requiresSection(attention, archived, timeZone, now),
-      h('div', { class: 'zones' }, workSection(tasks, timeZone), waitingSection(tasks, timeZone)),
-      previewSection(tasks, requiresIds),
-      allTasksSection(tasks, taskId),
+      requiresSection(attention, tasksById, archived, timeZone, now),
+      h('div', { class: 'zones' }, workSection(work, timeZone), waitingSection(waiting, timeZone)),
+      h('p', { class: 'overview-alltasks' }, h('a', { class: 'btn btn--secondary', href: allTasksUrl }, 'Открыть все задачи →')),
     ].filter(Boolean));
 
     if (taskSection && firstRender) taskSection.focus();

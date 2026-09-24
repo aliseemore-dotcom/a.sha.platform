@@ -274,7 +274,17 @@ a { color: inherit; }
 }
 .attention-row__link:hover { background: var(--attention-hover); }
 .attention-row__link:focus-visible { outline-color: var(--attention-accent); }
-.attention-row__link .chip { grid-area: chip; justify-self: start; }
+.attention-row__chips { grid-area: chip; justify-self: start; display: flex; flex-wrap: wrap; gap: 4px; }
+/* Временная подсветка строки, на которую сослались из другого блока (обзор мероприятия v2, §0) —
+   обычный класс, а не :target: в этом стеке нативный переход на #якорь ничего не подсвечивает
+   для содержимого внутри корневого узла приложения, поэтому подсветку и прокрутку делает JS. */
+.attention-row--flash .attention-row__link { background: var(--accent-tint); transition: background-color 1.2s ease; }
+
+/* Пояснение-ссылка «Ещё N задач(и) — в „Требует внимания“» — кнопка, оформленная как ссылка */
+.link-button {
+  display: inline; padding: 0; border: 0; background: none; font: inherit;
+  color: var(--ink-primary); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
 .attention-row__title {
   grid-area: title; font-weight: 600; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -676,7 +686,7 @@ a { color: inherit; }
   overflow-x: auto;
 }
 .stat {
-  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px;
   min-height: 64px; min-width: 96px;
   padding: var(--space-1) var(--space-2);
   background: var(--surface-white);
@@ -684,6 +694,7 @@ a { color: inherit; }
   border-radius: var(--radius-button);
   text-decoration: none; color: var(--ink-primary);
   flex: 1 1 0;
+  cursor: pointer; font: inherit;
 }
 .stat:hover { border-color: var(--line-strong); }
 .stat__num { font-size: var(--fs-heading); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
@@ -715,6 +726,12 @@ a { color: inherit; }
 }
 .plan-item > span:first-child { overflow-wrap: anywhere; }
 .plan-item--focus { background: var(--accent-tint); margin-inline: calc(-1 * var(--space-1)); padding-inline: var(--space-1); }
+
+/* Пояснение расхождения счётчика и строк, когда часть задач блока уже показана выше (v2 §0) */
+.shown-above { margin-top: var(--space-1); color: var(--ink-secondary); }
+.shown-above:first-child { margin-top: 0; }
+
+.overview-alltasks { text-align: center; margin: var(--space-2) 0 0; }
 
 /* ---------- панель задачи ---------- */
 

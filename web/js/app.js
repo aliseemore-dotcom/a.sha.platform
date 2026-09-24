@@ -5,6 +5,7 @@ import { api } from './api.js';
 import { renderLogin } from './views/login.js';
 import { renderEvents } from './views/events.js';
 import { renderOverview } from './views/overview.js';
+import { renderTaskList } from './views/taskList.js';
 
 const root = document.getElementById('root');
 let cleanup = null;
@@ -19,6 +20,9 @@ function match(pathname) {
   if (m) return { view: 'overview', params: { eventId: m[1] } };
   m = pathname.match(/^\/events\/([A-Za-z0-9_-]+)\/tasks\/([A-Za-z0-9_-]+)$/);
   if (m) return { view: 'overview', params: { eventId: m[1], taskId: m[2] } };
+  // Минимальный маршрут «Все задачи» (обзор мероприятия v2, §2.6) — список без превью и повторов.
+  m = pathname.match(/^\/events\/([A-Za-z0-9_-]+)\/tasks$/);
+  if (m) return { view: 'tasks', params: { eventId: m[1] } };
   if (pathname === '/') return { redirect: '/events' };
   return { view: 'notFound' };
 }
@@ -37,6 +41,10 @@ document.addEventListener('click', (e) => {
   if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   const url = new URL(a.href, location.href);
   if (url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
+  // Ссылка на якорь той же страницы: пусть браузер сам прокрутит и применит :target —
+  // иначе мы бы preventDefault()-или переход и тут же увидели, что pathname/search не
+  // изменились, и ничего не сделали бы вовсе.
+  if (url.pathname === location.pathname && url.search === location.search && url.hash) return;
   e.preventDefault();
   if (url.pathname + url.search !== location.pathname + location.search) navigate(url.pathname + url.search);
 });
@@ -145,6 +153,7 @@ async function render() {
   };
   if (route.view === 'events') cleanup = renderEvents(slot, ctx);
   else if (route.view === 'overview') cleanup = renderOverview(slot, ctx);
+  else if (route.view === 'tasks') cleanup = renderTaskList(slot, ctx);
   else slot.append(notFound());
 }
 

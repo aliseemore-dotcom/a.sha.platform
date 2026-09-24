@@ -17,16 +17,27 @@ export function withFrom(href, fromHref) {
   return fromHref ? `${href}?from=${encodeURIComponent(fromHref)}` : href;
 }
 
+/** Только внутренний путь списка `/events…`, не открытый редирект и не JS-адрес. */
+export function safeListPath(value) {
+  if (typeof value !== 'string' || !value.startsWith('/events') || value.startsWith('//') || value.includes('\\')) {
+    return null;
+  }
+  return value;
+}
+
 /**
- * Одна кликабельная строка задачи: статус → название → детали → стрелка. Вся строка — одна
+ * Одна кликабельная строка задачи: статус(ы) → название → детали → стрелка. Вся строка — одна
  * ссылка, без вложенных интерактивных элементов, с фокусом клавиатуры (общий компонент для
- * блока внимания на списке проектов и блоков «Требует решения» / «В работе» / «Ждём ответа»
- * в обзоре проекта).
+ * блока внимания на списке проектов и блоков «Требует внимания» / «В работе» / «Ждём ответа»
+ * в обзоре проекта). `id` — для якоря-подсветки (`:target`), когда на строку ссылаются издалека
+ * («Ещё 1 задача — в „Требует внимания“» — обзор мероприятия v2, §0). `secondary` — необязательный
+ * второй статус той же задачи (например, «В работе» рядом с «Просрочено»), чтобы не показывать
+ * задачу второй строкой в другом блоке.
  */
-export function taskRow({ href, tone, chipLabel, title, meta, tooltip }) {
-  return h('li', { class: 'attention-row' },
+export function taskRow({ id, href, tone, chipLabel, title, meta, tooltip, secondary }) {
+  return h('li', { class: 'attention-row', id },
     h('a', { href, class: 'attention-row__link', title: tooltip, 'aria-label': tooltip },
-      statusChip(tone, chipLabel),
+      h('span', { class: 'attention-row__chips' }, statusChip(tone, chipLabel), secondary),
       h('span', { class: 'attention-row__title' }, title),
       h('span', { class: 'attention-row__meta' }, meta),
       h('span', { class: 'attention-row__arrow', 'aria-hidden': 'true' }, '→'),
