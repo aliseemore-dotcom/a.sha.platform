@@ -3,6 +3,7 @@
 // Сроки считаются от момента запуска, чтобы на стенде всегда были видны все состояния.
 
 import { localDate, startOfLocalDay, addDays } from '../time.js';
+import { blankTaskFields } from '../tasks.js';
 
 export const DEMO_TIME_ZONE = 'Europe/Moscow';
 
@@ -39,17 +40,18 @@ export function seedDemo(store, now = Date.now()) {
   let n = 0;
   const task = (eventId, title, status, extra = {}) => store.insertTask({
     id: `task_demo_${String(++n).padStart(2, '0')}`, eventId, title, status,
-    dueAt: null, dueDate: null, followUpAt: null, waitingFrom: null, assigneeId: null,
+    section: null, ...blankTaskFields(),
     createdAt: nowIso, updatedAt: iso(now - n * 60_000), ...extra,
   });
 
   ev('evt_demo_anna_maxim', 'Анна + Максим', day(264), 'Загородная площадка «Лес»',
     { memberIds: ['usr_olga'], createdAt: iso(now - 9 * 86400_000) });
   task('evt_demo_anna_maxim', 'Подписать договор с площадкой', 'in_progress',
-    { dueAt: iso(laterToday), assigneeId: 'usr_elena' });
+    { dueAt: iso(laterToday), assigneeId: 'usr_elena',
+      description: 'Площадка прислала финальную версию — сверить пункты про отмену и депозит.' });
   task('evt_demo_anna_maxim', 'Согласовать меню', 'in_progress', { dueDate: day(21) });
   task('evt_demo_anna_maxim', 'Подбор ведущего', 'in_progress');
-  task('evt_demo_anna_maxim', 'Собрать предварительный список гостей', 'planned');
+  task('evt_demo_anna_maxim', 'Собрать предварительный список гостей', 'todo');
 
   ev('evt_demo_maria_ilya', 'Мария + Илья', day(40), 'Усадьба «Белые ночи»',
     { memberIds: ['usr_olga'], createdAt: iso(now - 30 * 86400_000) });
@@ -57,23 +59,27 @@ export function seedDemo(store, now = Date.now()) {
     { dueDate: day(-2), assigneeId: 'usr_olga' });
   task('evt_demo_maria_ilya', 'Согласовать смету с флористом', 'waiting',
     { dueAt: iso(now - 3 * 3600_000), followUpAt: day(-1), waitingFrom: 'Флорист', assigneeId: 'usr_elena' });
-  task('evt_demo_maria_ilya', 'Утвердить декор зала', 'blocked', {
-    dueDate: day(-1), assigneeId: 'usr_olga', blockedReason: 'Пара ещё не утвердила бюджет на декор',
+  task('evt_demo_maria_ilya', 'Утвердить декор зала', 'todo', {
+    dueDate: day(-1), assigneeId: 'usr_olga',
+    isBlocked: true, blockedReason: 'Пара ещё не утвердила бюджет на декор',
   });
   task('evt_demo_maria_ilya', 'Рассадка гостей', 'in_progress', { dueDate: day(10) });
-  task('evt_demo_maria_ilya', 'Подтвердить трансфер гостей', 'done', { dueDate: day(-5) });
+  task('evt_demo_maria_ilya', 'Подтвердить трансфер гостей', 'done', {
+    dueDate: day(-5), completedAt: iso(now - 6 * 86400_000), completedBy: 'usr_olga', previousStatus: 'in_progress',
+  });
+  task('evt_demo_maria_ilya', 'Забронировать резерв фотозоны', 'cancelled', { previousStatus: 'todo' });
 
   ev('evt_demo_anna_maxim_2', 'Анна + Максим', null, 'Ресторан «Сад»',
     { createdAt: iso(now - 2 * 86400_000) });
   task('evt_demo_anna_maxim_2', 'Получить ответ от фотографа', 'waiting',
     { followUpAt: day(0), waitingFrom: 'Фотограф', assigneeId: 'usr_elena' });
   task('evt_demo_anna_maxim_2', 'Получить ответ от кейтеринга', 'waiting', { followUpAt: day(3), waitingFrom: 'Кейтеринг' });
-  task('evt_demo_anna_maxim_2', 'Уточнить дату свадьбы', 'planned', { templateKey: 'wedding_v1:01' });
+  task('evt_demo_anna_maxim_2', 'Уточнить дату свадьбы', 'todo', { templateKey: 'wedding_v1:01' });
 
   ev('evt_demo_alina_roman', 'Алина + Роман', day(75), 'Отель «Причал»',
     { createdAt: iso(now - 14 * 86400_000) });
-  task('evt_demo_alina_roman', 'Выбрать ведущего', 'blocked', {
-    blockedReason: 'Пара не определилась с форматом вечера',
+  task('evt_demo_alina_roman', 'Выбрать ведущего', 'todo', {
+    isBlocked: true, blockedReason: 'Пара не определилась с форматом вечера',
   });
   task('evt_demo_alina_roman', 'Отправить паре варианты приглашений', 'in_progress', { dueDate: day(0) });
   task('evt_demo_alina_roman', 'Согласовать фотографа', 'in_progress', { dueDate: day(6) });
@@ -85,7 +91,7 @@ export function seedDemo(store, now = Date.now()) {
 
   ev('evt_demo_ekaterina_pavel', 'Екатерина + Павел', day(120), 'Пространство «Винзавод»',
     { createdAt: iso(now - 1 * 86400_000) });
-  task('evt_demo_ekaterina_pavel', 'Заполнить бриф пары', 'planned');
+  task('evt_demo_ekaterina_pavel', 'Заполнить бриф пары', 'todo');
 
   ev('evt_demo_sofia_artem', 'Софья + Артём', day(-200), 'Шато «Ле Грант»',
     { lifecycle: 'archived', createdAt: iso(now - 400 * 86400_000) });
@@ -97,8 +103,9 @@ export function seedDemo(store, now = Date.now()) {
     memberIds: [], planStatus: 'ready', createdAt: nowIso, updatedAt: nowIso, createdBy: 'usr_other',
   });
   store.insertTask({
-    id: 'task_demo_other', eventId: 'evt_demo_other', title: 'Чужая срочная задача', status: 'blocked',
-    dueAt: null, dueDate: null, followUpAt: null, assigneeId: 'usr_other', createdAt: nowIso, updatedAt: nowIso,
+    id: 'task_demo_other', eventId: 'evt_demo_other', title: 'Чужая срочная задача', status: 'todo',
+    section: null, ...blankTaskFields(), isBlocked: true, blockedReason: 'служебное',
+    assigneeId: 'usr_other', createdAt: nowIso, updatedAt: nowIso,
   });
 
   return { users };

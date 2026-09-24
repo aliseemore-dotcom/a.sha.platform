@@ -3,6 +3,10 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* Побеждает любой `display` класса той же специфичности, что и `[hidden]` (частая ловушка:
+   `.btn[hidden]`, `.field-row[hidden]` и т.п. иначе остаются видимыми). */
+[hidden] { display: none !important; }
+
 html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
@@ -761,3 +765,59 @@ a { color: inherit; }
 .plan-item__link { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; overflow-wrap: anywhere; }
 .plan-item__link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .plan-item__link[aria-current] { font-weight: 600; }
+
+/* ---------- задачи проекта: список ---------- */
+
+.task-filters {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2);
+  margin: var(--space-2) 0;
+  padding: var(--space-2);
+  background: var(--surface-muted);
+  border-radius: var(--radius-button);
+}
+.field--inline { display: flex; align-items: center; gap: var(--space-1); }
+.field--inline .field__label { font-size: var(--fs-caption); color: var(--ink-secondary); white-space: nowrap; }
+.field--inline[hidden] { display: none; }
+.checkbox--filter {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 40px; padding: 0 var(--space-1);
+  cursor: pointer; margin: 0;
+}
+.checkbox--filter[hidden] { display: none; }
+.checkbox--filter input { width: 18px; height: 18px; accent-color: var(--ink-primary); }
+.task-matched { margin-bottom: var(--space-2); }
+@media (max-width: 767px) {
+  .task-filters { flex-direction: column; align-items: stretch; }
+  .task-filters .search { width: auto; }
+  .field--inline { justify-content: space-between; }
+  .field--inline .select { flex: 1; max-width: none; }
+}
+
+.task-list { display: grid; border: 1px solid var(--line-soft); border-radius: var(--radius-card); overflow: hidden; background: var(--surface-white); }
+.task-row + .task-row { border-top: 1px solid var(--line-soft); }
+.task-row__link {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-height: 56px;
+  padding: var(--space-1) var(--space-2);
+  text-decoration: none;
+  color: inherit;
+}
+.task-row__link:hover { background: var(--surface-muted); }
+.task-row__link:focus-visible { outline: 2px solid var(--ink-primary); outline-offset: -2px; }
+.task-row__chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.task-row__title { font-weight: 600; overflow-wrap: anywhere; }
+.task-row__meta { font-size: var(--fs-caption); color: var(--ink-secondary); overflow-wrap: anywhere; }
+.task-row__arrow { color: var(--ink-secondary); }
+@media (max-width: 767px) {
+  .task-row__link { grid-template-columns: minmax(0, 1fr); }
+  .task-row__arrow { display: none; }
+}
+
+/* ---------- диалог задачи ---------- */
+
+.field-row { display: flex; gap: var(--space-1); }
+.field-row .field { flex: 1; min-width: 0; }
+textarea.input { min-height: 88px; padding: var(--space-1) var(--space-2); resize: vertical; }

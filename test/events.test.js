@@ -3,8 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  listEvents, listAttention, createEvent, retryPlan, getEvent, archiveEvent, restoreEvent, completeTask, ServiceError,
+  listEvents, listAttention, createEvent, retryPlan, getEvent, archiveEvent, restoreEvent, ServiceError,
 } from '../server/events.js';
+import { completeTask } from '../server/tasks.js';
 import { applyWeddingPlan } from '../server/plan.js';
 import { setup, NOON } from './helpers.js';
 
@@ -27,7 +28,7 @@ test('2. просроченная и заблокированная из раз�
   const e2 = event({ title: 'Вторая', eventDate: '2027-02-10' });
   const overdue = task(e1.id, { title: 'Просрочена', status: 'in_progress', dueDate: '2026-09-20' });
   task(e1.id, { title: 'Сегодня', status: 'in_progress', dueDate: '2026-09-23' });
-  task(e2.id, { title: 'Блок', status: 'blocked' });
+  task(e2.id, { title: 'Блок', isBlocked: true });
   task(e2.id, { title: 'Готово', status: 'done', dueDate: '2026-09-01' });
 
   let res = listEvents(ctx(owner));
@@ -48,7 +49,7 @@ test('2. просроченная и заблокированная из раз�
 test('архивные проекты не дают сигналов внимания', () => {
   const { event, task, ctx, owner } = setup();
   const e = event({ lifecycle: 'archived' });
-  task(e.id, { status: 'blocked' });
+  task(e.id, { isBlocked: true });
   const res = listEvents(ctx(owner), { lifecycle: 'archived' });
   assert.equal(res.attentionTotal, 0);
   assert.equal(res.items[0].urgentCount, 0);
@@ -62,7 +63,7 @@ test('«Сейчас в работе»: только in_progress вне вним
   task(e.id, { title: 'Раньше', status: 'in_progress', dueDate: '2026-10-01' });
   task(e.id, { title: 'Без срока', status: 'in_progress' });
   task(e.id, { title: 'Срочная', status: 'in_progress', dueDate: '2026-09-23' });
-  task(e.id, { title: 'План', status: 'planned' });
+  task(e.id, { title: 'План', status: 'todo' });
   const [card] = listEvents(ctx(owner)).items;
   assert.deepEqual(card.activePreview.map((t) => t.title), ['Раньше', 'Позже']);
 });
@@ -114,9 +115,9 @@ test('6. «По дате»: будущие по возрастанию, зате
   const today = event({ title: 'Сегодня', eventDate: '2026-09-23' });
   const pastOld = event({ title: 'Давняя', eventDate: '2026-06-01' });
   const pastNew = event({ title: 'Недавняя', eventDate: '2026-09-13' });
-  task(late.id, { status: 'blocked' });
-  task(late.id, { status: 'blocked' });
-  task(noDateB.id, { status: 'blocked' });
+  task(late.id, { isBlocked: true });
+  task(late.id, { isBlocked: true });
+  task(noDateB.id, { isBlocked: true });
 
   const res = listEvents(ctx(owner));
   assert.equal(res.sort, 'date');
@@ -139,7 +140,7 @@ test('архив: по дате события, сначала поздние, �
 test('4, 9. заблокированная просроченная задача считается один раз; после выполнения счётчики согласованы', () => {
   const { event, task, ctx, owner } = setup();
   const e = event({ title: 'Пара' });
-  const t = task(e.id, { status: 'blocked', dueDate: '2026-09-01', blockedReason: 'Нет бюджета' });
+  const t = task(e.id, { isBlocked: true, dueDate: '2026-09-01', blockedReason: 'Нет бюджета' });
   task(e.id, { status: 'in_progress', dueDate: '2026-09-23' });
   let res = listEvents(ctx(owner));
   assert.equal(res.attentionTotal, 2);
@@ -148,7 +149,7 @@ test('4, 9. заблокированная просроченная задача
   assert.equal(res.items[0].urgentCount, 2);
 
   const done = completeTask(ctx(owner), e.id, t.id);
-  assert.equal(done.task.status, 'done');
+  assert.equal(done.status, 'done');
   res = listEvents(ctx(owner));
   assert.equal(res.attentionTotal, 1);
   assert.equal(res.items[0].urgentCount, 1);
@@ -159,7 +160,7 @@ test('5. задача открывается по прямому маршрут�
   const { event, task, ctx, owner, member, store } = setup();
   const e = event();
   const other = event();
-  const t = task(e.id, { status: 'blocked', assigneeId: owner.id, blockedReason: 'Ждём договор' });
+  const t = task(e.id, { isBlocked: true, assigneeId: owner.id, blockedReason: 'Ждём договор' });
   const [item] = listEvents(ctx(owner)).attentionPreview;
   assert.equal(item.targetUrl, `/events/${e.id}/tasks/${t.id}`);
   const detail = getEvent(ctx(owner), e.id).tasks.find((x) => x.id === t.id);
@@ -167,7 +168,7 @@ test('5. задача открывается по прямому маршрут�
   assert.equal(detail.assigneeName, 'Елена');
   assert.throws(() => completeTask(ctx(owner), other.id, t.id), (err) => err.status === 404);
   assert.throws(() => completeTask(ctx(member), e.id, t.id), (err) => err.status === 404);
-  assert.equal(store.getTask(t.id).status, 'blocked');
+  assert.equal(store.getTask(t.id).isBlocked, true);
 });
 
 test('7. создание без даты; ошибка без названия; повтор с тем же ключом не создаёт дубль', () => {
@@ -202,7 +203,7 @@ test('план wedding_v1: 12 задач без даты свадьбы, 11 с �
   assert.equal(t2.length, 11);
   assert.ok(t1.some((t) => t.templateKey === 'wedding_v1:01'));
   assert.ok(!t2.some((t) => t.templateKey === 'wedding_v1:01'));
-  assert.ok(t1.every((t) => t.status === 'planned'));
+  assert.ok(t1.every((t) => t.status === 'todo'));
   // Стартовый план не создаёт сигналов внимания
   assert.equal(listEvents(ctx(owner)).attentionTotal, 0);
 });
@@ -239,7 +240,7 @@ test('9. доступ: участник видит только свои про�
   const { event, task, ctx, owner, member, stranger, store } = setup();
   const mine = event({ title: 'Моя', memberIds: [member.id] });
   const hidden = event({ title: 'Скрытая' });
-  task(hidden.id, { status: 'blocked' });
+  task(hidden.id, { isBlocked: true });
   store.insertEvent({ ...hidden, id: 'evt_foreign', workspaceId: 'ws2', title: 'Чужая' });
 
   assert.deepEqual(listEvents(ctx(member)).items.map((i) => i.id), [mine.id]);
@@ -271,7 +272,7 @@ test('архив и восстановление меняют вкладку и 
 test('догрузка внимания курсором: первые 5 в списке, дальше страницы по 20', () => {
   const { event, task, ctx, owner } = setup();
   const e = event();
-  for (let i = 0; i < 30; i++) task(e.id, { id: `task_${String(i).padStart(2, '0')}`, status: 'blocked' });
+  for (let i = 0; i < 30; i++) task(e.id, { id: `task_${String(i).padStart(2, '0')}`, isBlocked: true });
   const res = listEvents(ctx(owner));
   assert.equal(res.attentionPreview.length, 5);
   assert.equal(res.attentionTotal, 30);

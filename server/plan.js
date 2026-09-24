@@ -1,5 +1,7 @@
 // Стартовый план wedding_v1 (спецификация экрана 01, раздел 5).
-// Все задачи — planned, без ответственного и без срока: сроки по дате свадьбы не выдумываем.
+// Все задачи — todo, без ответственного и без срока: сроки по дате свадьбы не выдумываем.
+
+import { blankTaskFields } from './tasks.js';
 
 export const WEDDING_V1 = [
   { key: '01', section: 'Основное', title: 'Уточнить дату свадьбы', onlyWithoutDate: true },
@@ -33,12 +35,8 @@ export function applyWeddingPlan(store, event, nowIso) {
       templateKey,
       section: item.section,
       title: item.title,
-      status: 'planned',
-      dueAt: null,
-      dueDate: null,
-      followUpAt: null,
-      waitingFrom: null,
-      assigneeId: null,
+      status: 'todo',
+      ...blankTaskFields(),
       createdAt: nowIso,
       updatedAt: nowIso,
     });

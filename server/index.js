@@ -10,8 +10,12 @@ import { fileURLToPath } from 'node:url';
 import { createStore } from './store.js';
 import {
   listEvents, listAttention, getEvent, createEvent, retryPlan,
-  archiveEvent, restoreEvent, completeTask, ServiceError,
+  archiveEvent, restoreEvent,
 } from './events.js';
+import {
+  listTasks, createTask, getTask, updateTask, completeTask, restoreTask as restoreTaskAction,
+} from './tasks.js';
+import { ServiceError } from './errors.js';
 import { hasPermission } from './access.js';
 import { isValidTimeZone } from './time.js';
 import { seedDemo, DEMO_TIME_ZONE } from './demo/seed.js';
@@ -173,10 +177,32 @@ async function handleApi(req, res, url) {
     return json(res, 200, listAttention(ctx, Object.fromEntries(url.searchParams)));
   }
 
-  const t = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/tasks\/([A-Za-z0-9_-]{1,64})\/complete$/);
-  if (t && method === 'POST') {
+  const taskAction = pathname.match(
+    /^\/api\/events\/([A-Za-z0-9_-]{1,64})\/tasks\/([A-Za-z0-9_-]{1,64})\/(complete|restore)$/,
+  );
+  if (taskAction && method === 'POST') {
     await readJson(req);
-    return json(res, 200, completeTask(ctx, t[1], t[2]));
+    const [, eventId, taskId, action] = taskAction;
+    return json(res, 200, action === 'complete'
+      ? completeTask(ctx, eventId, taskId)
+      : restoreTaskAction(ctx, eventId, taskId));
+  }
+
+  const taskItem = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/tasks\/([A-Za-z0-9_-]{1,64})$/);
+  if (taskItem) {
+    const [, eventId, taskId] = taskItem;
+    if (method === 'GET') return json(res, 200, getTask(ctx, eventId, taskId));
+    if (method === 'PATCH') return json(res, 200, updateTask(ctx, eventId, taskId, await readJson(req)));
+  }
+
+  const taskList = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/tasks$/);
+  if (taskList) {
+    const [, eventId] = taskList;
+    if (method === 'GET') return json(res, 200, listTasks(ctx, eventId, Object.fromEntries(url.searchParams)));
+    if (method === 'POST') {
+      const result = createTask(ctx, eventId, await readJson(req));
+      return json(res, 201, result);
+    }
   }
 
   const m = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})(?:\/(archive|restore|plan))?$/);

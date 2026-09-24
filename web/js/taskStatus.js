@@ -1,13 +1,16 @@
-// Общий словарь статусов задачи (тон компонента + слово) и закрытые статусы —
-// используется обзором проекта и списком «Все задачи», чтобы не разойтись в формулировках.
+// Общий словарь рабочих статусов задачи (тон компонента + слово) и закрытые статусы.
+// Блокировка — отдельный признак задачи (`isBlocked`/`blockedReason`), не значение статуса:
+// задача может быть одновременно «В работе» и заблокирована («Задачи мероприятия», раздел 2).
 
 export const STATUS_WORD = {
-  planned: ['planned', 'Запланировано'],
+  todo: ['planned', 'Не начато'],
   in_progress: ['progress', 'В работе'],
   waiting: ['soon', 'Ждём ответа'],
-  blocked: ['blocked', 'Заблокировано'],
   done: ['done', 'Готово'],
   cancelled: ['planned', 'Отменено'],
 };
 
 export const CLOSED_STATUSES = new Set(['done', 'cancelled']);
+export const OPEN_STATUSES = ['todo', 'in_progress', 'waiting'];
+
+export const BLOCKED_CHIP = ['blocked', 'Заблокировано'];

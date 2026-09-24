@@ -26,8 +26,10 @@ export function setup() {
   };
   const task = (eventId, over = {}) => {
     const t = {
-      id: over.id ?? `task_${++seq}`, eventId, title: 'Задача', status: 'planned',
-      dueAt: null, dueDate: null, followUpAt: null, assigneeId: null,
+      id: over.id ?? `task_${++seq}`, eventId, title: 'Задача', status: 'todo',
+      dueAt: null, dueDate: null, followUpAt: null, waitingFrom: null, assigneeId: null,
+      isBlocked: false, blockedReason: null, description: null,
+      completedAt: null, completedBy: null, previousStatus: null,
       createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', ...over,
     };
     store.insertTask(t);

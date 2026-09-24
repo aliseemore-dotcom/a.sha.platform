@@ -33,8 +33,10 @@ export function overdueFrom(task, timeZone) {
 /** Вид внимания задачи или null. Одна задача — один вид, с наивысшим приоритетом. */
 export function classifyTask(task, now, timeZone) {
   if (CLOSED.has(task.status)) return null;
-  // Блокировка — явный статус задачи, из просрочки не выводится.
-  if (task.status === 'blocked') return 'blocked';
+  // Блокировка — отдельный признак задачи (не значение status), из просрочки не выводится.
+  // Задача может быть одновременно in_progress/waiting и заблокированной (задачи «Мои
+  // мероприятия» и обзора, раздел «Задачи мероприятия» v1, §2).
+  if (task.isBlocked) return 'blocked';
 
   const overdueAt = overdueFrom(task, timeZone);
   if (overdueAt !== null && now >= overdueAt) return 'overdue';

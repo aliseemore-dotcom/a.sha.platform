@@ -23,10 +23,15 @@ test('срок-дата без времени остаётся «Сегодня�
 });
 
 test('заблокированная и просроченная задача — одна строка «blocked»; блокировка не выводится из просрочки', () => {
-  const t = { ...base, status: 'blocked', dueDate: '2026-09-20' };
+  const t = { ...base, isBlocked: true, dueDate: '2026-09-20' };
   assert.equal(classifyTask(t, NOON, TZ), 'blocked');
-  assert.equal(classifyTask({ ...base, status: 'blocked' }, NOON, TZ), 'blocked');
+  assert.equal(classifyTask({ ...base, isBlocked: true }, NOON, TZ), 'blocked');
   assert.equal(classifyTask({ ...base, dueDate: '2026-09-20' }, NOON, TZ), 'overdue');
+});
+
+test('isBlocked — отдельный признак: задача может быть in_progress и заблокирована одновременно', () => {
+  assert.equal(classifyTask({ ...base, status: 'in_progress', isBlocked: true }, NOON, TZ), 'blocked');
+  assert.equal(classifyTask({ ...base, status: 'waiting', isBlocked: true }, NOON, TZ), 'blocked');
 });
 
 test('завтрашний срок и сегодняшний будущий срок не просрочены', () => {
@@ -45,10 +50,11 @@ test('waiting без наступившего срока — не сигнал �
   assert.equal(classifyTask({ ...t, dueDate: '2026-09-01' }, NOON, TZ), 'overdue');
 });
 
-test('done и cancelled не попадают во внимание; planned без срока — тоже', () => {
+test('done и cancelled не попадают во внимание, даже заблокированные; todo без срока — тоже', () => {
   assert.equal(classifyTask({ ...base, status: 'done', dueDate: '2026-09-01' }, NOON, TZ), null);
   assert.equal(classifyTask({ ...base, status: 'cancelled', dueDate: '2026-09-01' }, NOON, TZ), null);
-  assert.equal(classifyTask({ ...base, status: 'planned' }, NOON, TZ), null);
+  assert.equal(classifyTask({ ...base, status: 'done', isBlocked: true }, NOON, TZ), null);
+  assert.equal(classifyTask({ ...base, status: 'todo' }, NOON, TZ), null);
 });
 
 test('сортировка внимания: заблокированные и просроченные вместе выше «Сегодня», старший срок выше, затем проект и id', () => {

@@ -7,20 +7,15 @@ import {
 import { visibleEvents, canSeeEvent, hasPermission } from './access.js';
 import { applyWeddingPlan } from './plan.js';
 import { isValidDate, localDate } from './time.js';
+import { publicTask, assignableUsers } from './tasks.js';
+import { ServiceError } from './errors.js';
+
+export { ServiceError };
 
 export const PAGE_SIZE = 20;
 export const ATTENTION_PREVIEW = 5;
 export const TITLE_MAX = 100;
 export const LOCATION_MAX = 150;
-
-export class ServiceError extends Error {
-  constructor(status, code, message, fields) {
-    super(message);
-    this.status = status;
-    this.code = code;
-    this.fields = fields;
-  }
-}
 
 const notFound = () => new ServiceError(404, 'not_found', 'Проект не найден или недоступен');
 
@@ -191,23 +186,6 @@ export function listAttention(ctx, query = {}) {
 
 // ---------- один проект (минимум для перехода в обзор) ----------
 
-function publicTask(ctx, t) {
-  return {
-    id: t.id,
-    title: t.title,
-    section: t.section ?? null,
-    status: t.status,
-    dueAt: t.dueAt ?? null,
-    dueDate: t.dueDate ?? null,
-    followUpAt: t.followUpAt ?? null,
-    waitingFrom: t.waitingFrom ?? null,
-    assigneeName: ctx.store.getUser(t.assigneeId)?.name ?? null,
-    blockedReason: t.blockedReason ?? null,
-    templateKey: t.templateKey ?? null,
-    updatedAt: t.updatedAt,
-  };
-}
-
 export function getEvent(ctx, eventId) {
   const event = ctx.store.getEvent(eventId);
   if (!canSeeEvent(ctx.user, event)) throw notFound();
@@ -218,27 +196,12 @@ export function getEvent(ctx, eventId) {
     event: publicCard(card),
     attention: attention.filter((i) => i.eventId === eventId).map(publicAttentionItem),
     tasks: tasks.map((t) => publicTask(ctx, t)),
+    // Кому можно назначить задачу — раздел 6 «Задачи мероприятия»: только те, у кого есть
+    // доступ к этому проекту.
+    teamMembers: assignableUsers(ctx.store, event).map((u) => ({ id: u.id, name: u.name })),
     canArchive: hasPermission(ctx.user, 'event:archive'),
     timeZone: ctx.timeZone,
   };
-}
-
-/**
- * Отметить задачу выполненной. Счётчики и карточки пересчитываются из тех же данных
- * при следующем запросе списка — вручную ничего не правится.
- */
-export function completeTask(ctx, eventId, taskId) {
-  const event = ctx.store.getEvent(eventId);
-  if (!canSeeEvent(ctx.user, event)) throw notFound();
-  const task = ctx.store.getTask(taskId);
-  if (!task || task.eventId !== eventId) {
-    throw new ServiceError(404, 'task_not_found', 'Задача не найдена или недоступна');
-  }
-  if (event.lifecycle !== 'active') throw new ServiceError(409, 'archived', 'Проект в архиве');
-  if (task.status !== 'done' && task.status !== 'cancelled') {
-    ctx.store.updateTask(taskId, { status: 'done', updatedAt: new Date(ctx.now).toISOString() });
-  }
-  return { eventId, task: publicTask(ctx, ctx.store.getTask(taskId)) };
 }
 
 // ---------- создание ----------

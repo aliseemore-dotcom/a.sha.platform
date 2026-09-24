@@ -59,5 +59,15 @@ export const api = {
   restoreEvent: (id) => request('POST', `/api/events/${encodeURIComponent(id)}/restore`, {}),
   completeTask: (eventId, taskId) => request('POST',
     `/api/events/${encodeURIComponent(eventId)}/tasks/${encodeURIComponent(taskId)}/complete`, {}),
+  restoreTask: (eventId, taskId) => request('POST',
+    `/api/events/${encodeURIComponent(eventId)}/tasks/${encodeURIComponent(taskId)}/restore`, {}),
   retryPlan: (id) => request('POST', `/api/events/${encodeURIComponent(id)}/plan`, {}),
+
+  listTasks: (eventId, params, opts) => request('GET',
+    `/api/events/${encodeURIComponent(eventId)}/tasks${qs(params)}`, undefined, opts),
+  getTask: (eventId, taskId, opts) => request('GET',
+    `/api/events/${encodeURIComponent(eventId)}/tasks/${encodeURIComponent(taskId)}`, undefined, opts),
+  createTask: (eventId, body) => request('POST', `/api/events/${encodeURIComponent(eventId)}/tasks`, body),
+  updateTask: (eventId, taskId, body) => request('PATCH',
+    `/api/events/${encodeURIComponent(eventId)}/tasks/${encodeURIComponent(taskId)}`, body),
 };

@@ -6,6 +6,7 @@ import { renderLogin } from './views/login.js';
 import { renderEvents } from './views/events.js';
 import { renderOverview } from './views/overview.js';
 import { renderTaskList } from './views/taskList.js';
+import { renderTaskDetail } from './views/taskDetail.js';
 
 const root = document.getElementById('root');
 let cleanup = null;
@@ -18,9 +19,11 @@ function match(pathname) {
   if (pathname === '/events') return { view: 'events' };
   let m = pathname.match(/^\/events\/([A-Za-z0-9_-]+)\/overview$/);
   if (m) return { view: 'overview', params: { eventId: m[1] } };
+  // Карточка задачи — отдельный маршрут («Задачи мероприятия», §5.3): работает после
+  // перезагрузки и в новой вкладке, независимо от обзора.
   m = pathname.match(/^\/events\/([A-Za-z0-9_-]+)\/tasks\/([A-Za-z0-9_-]+)$/);
-  if (m) return { view: 'overview', params: { eventId: m[1], taskId: m[2] } };
-  // Минимальный маршрут «Все задачи» (обзор мероприятия v2, §2.6) — список без превью и повторов.
+  if (m) return { view: 'taskDetail', params: { eventId: m[1], taskId: m[2] } };
+  // Список всех задач проекта («Задачи мероприятия»): поиск, фильтры, сортировка, создание.
   m = pathname.match(/^\/events\/([A-Za-z0-9_-]+)\/tasks$/);
   if (m) return { view: 'tasks', params: { eventId: m[1] } };
   if (pathname === '/') return { redirect: '/events' };
@@ -154,6 +157,7 @@ async function render() {
   if (route.view === 'events') cleanup = renderEvents(slot, ctx);
   else if (route.view === 'overview') cleanup = renderOverview(slot, ctx);
   else if (route.view === 'tasks') cleanup = renderTaskList(slot, ctx);
+  else if (route.view === 'taskDetail') cleanup = renderTaskDetail(slot, ctx);
   else slot.append(notFound());
 }
 
