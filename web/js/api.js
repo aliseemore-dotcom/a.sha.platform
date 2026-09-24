@@ -38,7 +38,7 @@ async function request(method, path, body, { signal } = {}) {
   return data;
 }
 
-const qs = (params) => {
+const qs = (params = {}) => {
   const s = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '') s.set(k, v);
   const str = s.toString();
@@ -73,4 +73,16 @@ export const api = {
   addChecklistItems: (eventId, body) => request('POST', `/api/events/${encodeURIComponent(eventId)}/checklist`, body),
   updateTask: (eventId, taskId, body) => request('PATCH',
     `/api/events/${encodeURIComponent(eventId)}/tasks/${encodeURIComponent(taskId)}`, body),
+
+  listVendors: (params, opts) => request('GET', `/api/vendors${qs(params)}`, undefined, opts),
+  createVendor: (body) => request('POST', '/api/vendors', body),
+  updateVendor: (id, body) => request('PATCH', `/api/vendors/${encodeURIComponent(id)}`, body),
+  deleteVendor: (id) => request('DELETE', `/api/vendors/${encodeURIComponent(id)}`),
+
+  listEventVendors: (eventId, opts) => request('GET', `/api/events/${encodeURIComponent(eventId)}/vendors`, undefined, opts),
+  addEventVendors: (eventId, body) => request('POST', `/api/events/${encodeURIComponent(eventId)}/vendors`, body),
+  updateEventVendorStatus: (eventId, linkId, status) => request('PATCH',
+    `/api/events/${encodeURIComponent(eventId)}/vendors/${encodeURIComponent(linkId)}`, { status }),
+  removeEventVendor: (eventId, linkId) => request('DELETE',
+    `/api/events/${encodeURIComponent(eventId)}/vendors/${encodeURIComponent(linkId)}`),
 };

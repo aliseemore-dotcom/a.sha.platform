@@ -16,6 +16,10 @@ import {
   listTasks, createTask, getTask, updateTask, completeTask, restoreTask as restoreTaskAction,
 } from './tasks.js';
 import { getChecklist, addChecklistItems } from './checklist.js';
+import { listVendors, createVendor, updateVendor, deleteVendor } from './vendors.js';
+import {
+  listEventVendors, addEventVendors, updateEventVendorStatus, removeEventVendor,
+} from './eventVendors.js';
 import { ServiceError } from './errors.js';
 import { hasPermission } from './access.js';
 import { isValidTimeZone } from './time.js';
@@ -211,6 +215,40 @@ async function handleApi(req, res, url) {
     const [, eventId] = checklist;
     if (method === 'GET') return json(res, 200, getChecklist(ctx, eventId));
     if (method === 'POST') return json(res, 200, addChecklistItems(ctx, eventId, await readJson(req)));
+  }
+
+  // ---------- личная база подрядчиков ----------
+
+  if (pathname === '/api/vendors' && method === 'GET') {
+    return json(res, 200, listVendors(ctx, Object.fromEntries(url.searchParams)));
+  }
+  if (pathname === '/api/vendors' && method === 'POST') {
+    return json(res, 201, createVendor(ctx, await readJson(req)));
+  }
+  const vendorItem = pathname.match(/^\/api\/vendors\/([A-Za-z0-9_-]{1,64})$/);
+  if (vendorItem) {
+    const [, vendorId] = vendorItem;
+    if (method === 'PATCH') return json(res, 200, updateVendor(ctx, vendorId, await readJson(req)));
+    if (method === 'DELETE') return json(res, 200, deleteVendor(ctx, vendorId));
+  }
+
+  // ---------- подрядчики свадьбы ----------
+
+  const eventVendorItem = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/vendors\/([A-Za-z0-9_-]{1,64})$/);
+  if (eventVendorItem) {
+    const [, eventId, linkId] = eventVendorItem;
+    if (method === 'PATCH') {
+      const body = await readJson(req);
+      return json(res, 200, updateEventVendorStatus(ctx, eventId, linkId, body?.status));
+    }
+    if (method === 'DELETE') return json(res, 200, removeEventVendor(ctx, eventId, linkId));
+  }
+
+  const eventVendorList = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/vendors$/);
+  if (eventVendorList) {
+    const [, eventId] = eventVendorList;
+    if (method === 'GET') return json(res, 200, listEventVendors(ctx, eventId));
+    if (method === 'POST') return json(res, 200, addEventVendors(ctx, eventId, await readJson(req)));
   }
 
   const m = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})(?:\/(archive|restore|plan))?$/);

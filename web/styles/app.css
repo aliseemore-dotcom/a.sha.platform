@@ -112,7 +112,8 @@ a { color: inherit; }
 .profile__panel[hidden] { display: none; }
 .profile__name { font-weight: 600; }
 .profile__meta { font-size: var(--fs-caption); color: var(--ink-secondary); overflow-wrap: anywhere; }
-.profile__logout { margin-top: var(--space-1); width: 100%; }
+.profile__link { margin-top: var(--space-1); width: 100%; text-align: center; text-decoration: none; }
+.profile__logout { margin-top: var(--space-half); width: 100%; }
 
 .stand-badge {
   flex: none;
@@ -573,9 +574,12 @@ a { color: inherit; }
 .dialog__title { font-size: var(--fs-heading); font-weight: 700; }
 .dialog__body { padding: var(--space-1) var(--space-3); overflow-y: auto; display: grid; gap: var(--space-1); }
 .dialog__foot {
-  display: flex; justify-content: flex-end; gap: var(--space-1);
+  display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1);
   padding: var(--space-2) var(--space-3) var(--space-3);
 }
+/* «+ Добавить нового подрядчика» — всегда на своей строке слева, чтобы не тесниться
+   с «Отмена»/«Добавить N» на узком диалоге */
+.dialog__foot .dialog__foot-extra { flex: 1 1 100%; order: -1; margin-right: auto; margin-bottom: var(--space-1); }
 @media (max-width: 767px) {
   .dialog {
     width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0;
@@ -843,3 +847,28 @@ textarea.input { min-height: 88px; padding: var(--space-1) var(--space-2); resiz
   .checklist-item { flex-direction: column; align-items: flex-start; }
   .checklist-item__date { width: 100%; }
 }
+
+/* summary как заголовок раздела в панели выбора подрядчиков (<details> вместо <div>) */
+.checklist-group > summary.checklist-group__title {
+  cursor: pointer; list-style: none; margin-bottom: var(--space-1);
+  min-height: 32px; display: flex; align-items: center;
+}
+.checklist-group > summary::-webkit-details-marker { display: none; }
+.checklist-group > summary::before { content: '▸'; margin-right: 6px; font-size: 11px; color: var(--ink-secondary); }
+.checklist-group[open] > summary::before { content: '▾'; }
+
+/* ---------- подрядчики ---------- */
+
+.vendor-list { display: grid; gap: var(--space-1); }
+.vendor-row {
+  padding: var(--space-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-button);
+  background: var(--surface-white);
+  display: grid; gap: 6px;
+}
+.vendor-row__main { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.vendor-row__name { font-weight: 600; overflow-wrap: anywhere; }
+.vendor-row__meta { color: var(--ink-secondary); font-size: var(--fs-caption); overflow-wrap: anywhere; margin: 0; }
+.vendor-row__note { color: var(--ink-secondary); overflow-wrap: anywhere; margin: 0; }
+.vendor-row__actions { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: 4px; }

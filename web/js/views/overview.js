@@ -10,6 +10,7 @@ import {
   statusChip, taskRow, withFrom, safeListPath,
 } from '../ui/components.js';
 import { openChecklistPanel } from '../ui/checklistPanel.js';
+import { openVendorPickerPanel } from '../ui/vendorPickerPanel.js';
 import {
   fullDate, dateTimeIn, attentionLabel, projectStage, relativeDay, pluralize,
 } from '../format.js';
@@ -87,8 +88,21 @@ export function renderOverview(slot, { params, session, query }) {
   let controller = new AbortController();
   let firstRender = true;
   let requiresExpanded = false;
+  let vendors = null;
+  let vendorsError = false;
 
   const back = () => h('p', { class: 'back' }, h('a', { href: backToList, class: 'link' }, '← Мои мероприятия'));
+
+  async function loadVendors() {
+    try {
+      const res = await api.listEventVendors(params.eventId);
+      vendors = res.items;
+      vendorsError = false;
+    } catch {
+      vendorsError = true;
+    }
+    if (lastData) render(lastData);
+  }
 
   async function load() {
     controller.abort();
@@ -96,6 +110,7 @@ export function renderOverview(slot, { params, session, query }) {
     try {
       const data = await api.getEvent(params.eventId, { signal: controller.signal });
       render(data);
+      loadVendors();
     } catch (err) {
       if (err.name === 'AbortError') return;
       clear(main);
@@ -269,6 +284,91 @@ export function renderOverview(slot, { params, session, query }) {
     );
   }
 
+  // ---------- подрядчики свадьбы ----------
+
+  async function toggleVendorStatus(v, button) {
+    button.disabled = true;
+    try {
+      await api.updateEventVendorStatus(params.eventId, v.id, v.status === 'confirmed' ? 'candidate' : 'confirmed');
+      loadVendors();
+    } catch {
+      button.disabled = false;
+      announce('Не удалось изменить статус. Повторите попытку.', 0);
+    }
+  }
+
+  async function removeVendor(v, button) {
+    if (!window.confirm(`Убрать «${v.name}» из этой свадьбы? Личная запись сохранится.`)) return;
+    button.disabled = true;
+    try {
+      await api.removeEventVendor(params.eventId, v.id);
+      announce('Подрядчик убран из свадьбы', 0);
+      loadVendors();
+    } catch {
+      button.disabled = false;
+      announce('Не удалось убрать. Повторите попытку.', 0);
+    }
+  }
+
+  function vendorItemRow(v, canEdit) {
+    const meta = [v.phone, v.link].filter(Boolean).join(' · ');
+    return h('li', { class: 'vendor-row' },
+      h('div', { class: 'vendor-row__main' },
+        statusChip(v.status === 'confirmed' ? 'done' : 'planned', v.status === 'confirmed' ? 'Подтверждён' : 'Кандидат'),
+        h('span', { class: 'vendor-row__name' }, v.name),
+      ),
+      meta ? h('p', { class: 'vendor-row__meta' }, meta) : null,
+      canEdit ? h('div', { class: 'vendor-row__actions' },
+        h('button', {
+          type: 'button', class: 'btn btn--secondary btn--small',
+          onclick: (e) => toggleVendorStatus(v, e.currentTarget),
+        }, v.status === 'confirmed' ? 'Вернуть в кандидаты' : 'Подтвердить'),
+        h('button', {
+          type: 'button', class: 'btn btn--ghost btn--small',
+          onclick: (e) => removeVendor(v, e.currentTarget),
+        }, 'Убрать'),
+      ) : null,
+    );
+  }
+
+  function vendorsSection(event, archived) {
+    const pickBtn = !archived ? h('button', {
+      type: 'button', class: 'btn btn--secondary btn--small',
+      onclick: (e) => openVendorPickerPanel({
+        opener: e.currentTarget,
+        eventId: event.id,
+        onAdded: () => { announce('Подрядчики добавлены', 0); loadVendors(); },
+      }),
+    }, '+ Выбрать подрядчиков') : null;
+
+    let body;
+    if (vendorsError) {
+      body = h('p', { class: 'muted' }, 'Не удалось загрузить подрядчиков.');
+    } else if (vendors === null) {
+      body = h('p', { class: 'muted' }, 'Загружаем…');
+    } else if (!vendors.length) {
+      body = h('p', { class: 'muted' }, 'Подрядчики ещё не выбраны');
+    } else {
+      const bySection = new Map();
+      for (const v of vendors) {
+        if (!bySection.has(v.category)) bySection.set(v.category, []);
+        bySection.get(v.category).push(v);
+      }
+      body = h('div', { class: 'checklist-groups' },
+        [...bySection].map(([category, items]) => h('div', { class: 'checklist-group' },
+          h('h3', { class: 'overline checklist-group__title' }, category),
+          h('ul', { class: 'vendor-list' }, items.map((v) => vendorItemRow(v, !archived))))));
+    }
+
+    return h('section', { class: 'zone', 'aria-labelledby': 'zone-vendors' },
+      h('div', { class: 'zone__head' },
+        h('h2', { class: 'zone__title', id: 'zone-vendors' }, `Подрядчики${vendors?.length ? ` · ${vendors.length}` : ''}`),
+        pickBtn,
+      ),
+      body,
+    );
+  }
+
   /**
    * Показатель-переход (§2.2): ведёт к своему блоку; если в нём не осталось собственных строк
    * (все задачи уже показаны в «Требует внимания»), прокручивает и подсвечивает первую из них.
@@ -364,6 +464,7 @@ export function renderOverview(slot, { params, session, query }) {
       requiresSection(attention, tasksById, archived, timeZone, now),
       h('div', { class: 'zones' }, workSection(work, timeZone), waitingSection(waiting, timeZone)),
       h('p', { class: 'overview-alltasks' }, h('a', { class: 'btn btn--secondary', href: allTasksUrl }, 'Открыть все задачи →')),
+      vendorsSection(event, archived),
     ].filter(Boolean));
 
     firstRender = false;

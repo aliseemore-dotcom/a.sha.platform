@@ -7,6 +7,7 @@ import { renderEvents } from './views/events.js';
 import { renderOverview } from './views/overview.js';
 import { renderTaskList } from './views/taskList.js';
 import { renderTaskDetail } from './views/taskDetail.js';
+import { renderVendors } from './views/vendors.js';
 
 const root = document.getElementById('root');
 let cleanup = null;
@@ -17,6 +18,7 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 function match(pathname) {
   if (pathname === '/login') return { view: 'login' };
   if (pathname === '/events') return { view: 'events' };
+  if (pathname === '/vendors') return { view: 'vendors' };
   let m = pathname.match(/^\/events\/([A-Za-z0-9_-]+)\/overview$/);
   if (m) return { view: 'overview', params: { eventId: m[1] } };
   // Карточка задачи — отдельный маршрут («Задачи мероприятия», §5.3): работает после
@@ -75,6 +77,7 @@ function header() {
     h('p', { class: 'profile__name' }, user.name),
     h('p', { class: 'profile__meta' }, `${ROLE[user.role] ?? user.role} · ${workspace.name}`),
     demo ? h('p', { class: 'profile__meta' }, 'Тестовый стенд: данные вымышленные') : null,
+    h('a', { class: 'btn btn--secondary profile__link', href: '/vendors' }, 'Мои подрядчики'),
     h('button', {
       type: 'button', class: 'btn btn--secondary profile__logout',
       onclick: async () => {
@@ -155,6 +158,7 @@ async function render() {
     restoreScroll: history.state?.scrollY ?? null,
   };
   if (route.view === 'events') cleanup = renderEvents(slot, ctx);
+  else if (route.view === 'vendors') cleanup = renderVendors(slot, ctx);
   else if (route.view === 'overview') cleanup = renderOverview(slot, ctx);
   else if (route.view === 'tasks') cleanup = renderTaskList(slot, ctx);
   else if (route.view === 'taskDetail') cleanup = renderTaskDetail(slot, ctx);
