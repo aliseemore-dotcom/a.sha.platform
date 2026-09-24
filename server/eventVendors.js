@@ -4,8 +4,8 @@
 
 import { canSeeEvent } from './access.js';
 import { requireMutable } from './tasks.js';
-import { publicVendor } from './vendors.js';
 import { ServiceError } from './errors.js';
+import { createLineForVendor, syncLineIncludedOnConfirm, resolveVendorLine } from './budget.js';
 
 const notFound = () => new ServiceError(404, 'not_found', 'Проект не найден или недоступен');
 const linkNotFound = () => new ServiceError(404, 'not_found', 'Подрядчик не найден в этой свадьбе');
@@ -14,6 +14,7 @@ function publicEventVendor(ev) {
   return {
     id: ev.id, vendorId: ev.sourceVendorId, category: ev.category, name: ev.name,
     phone: ev.phone, link: ev.link, note: ev.note, status: ev.status,
+    price: ev.price ?? null, currency: ev.currency,
     createdAt: ev.createdAt, updatedAt: ev.updatedAt,
   };
 }
@@ -60,11 +61,17 @@ export function addEventVendors(ctx, eventId, body) {
       phone: source.phone ?? null,
       link: source.link ?? null,
       note: source.note ?? null,
+      price: source.price ?? null,
+      currency: source.currency,
       status: 'candidate',
       createdAt: nowIso,
       updatedAt: nowIso,
     };
     store.insertEventVendor(ev);
+    // Одна связанная строка сметы на подрядчика (docs/specs/06-budget.md) — создаётся один раз,
+    // здесь же, а не отдельным запросом с клиента: повторного добавления того же ev не будет
+    // (findEventVendorBySource выше), значит и вторая строка не появится.
+    createLineForVendor(store, eventId, ev, nowIso);
     created.push(ev);
   }
 
@@ -80,7 +87,12 @@ function getOwnedLink(store, user, eventId, linkId) {
   return { event, link };
 }
 
-/** «Подтверждён» / «Вернуть в кандидаты» — единственное изменяемое поле копии. */
+/**
+ * «Подтверждён» / «Вернуть в кандидаты». Подтверждение включает связанную строку сметы в итог
+ * автоматически (docs/specs/06-budget.md); возврат в кандидаты статус строки не трогает — если
+ * организатор уже осознанно включил её в итог вручную, снятие подтверждения не должно молча
+ * убрать её оттуда.
+ */
 export function updateEventVendorStatus(ctx, eventId, linkId, status) {
   const { store, user, now } = ctx;
   const { event, link } = getOwnedLink(store, user, eventId, linkId);
@@ -88,15 +100,22 @@ export function updateEventVendorStatus(ctx, eventId, linkId, status) {
   if (!['candidate', 'confirmed'].includes(status)) {
     throw new ServiceError(422, 'validation', 'Неверный статус', { status: 'candidate или confirmed' });
   }
-  store.updateEventVendor(link.id, { status, updatedAt: new Date(now).toISOString() });
+  const nowIso = new Date(now).toISOString();
+  store.updateEventVendor(link.id, { status, updatedAt: nowIso });
+  if (status === 'confirmed') syncLineIncludedOnConfirm(store, eventId, link.id, nowIso);
   return publicEventVendor(store.getEventVendor(link.id));
 }
 
-/** Убрать из свадьбы — не трогает личную запись пользователя. */
-export function removeEventVendor(ctx, eventId, linkId) {
-  const { store, user } = ctx;
+/**
+ * Убрать из свадьбы — не трогает личную запись пользователя. `budgetAction` решает судьбу
+ * связанной строки сметы: `delete` убирает её вместе с подрядчиком, `keep` оставляет отдельным
+ * ручным расходом (раздел «Как работает экран», пункт 4 в docs/specs/06-budget.md).
+ */
+export function removeEventVendor(ctx, eventId, linkId, budgetAction = 'delete') {
+  const { store, user, now } = ctx;
   const { event, link } = getOwnedLink(store, user, eventId, linkId);
   requireMutable(user, event);
+  resolveVendorLine(store, eventId, link.id, budgetAction === 'keep' ? 'keep' : 'delete', new Date(now).toISOString());
   store.deleteEventVendor(link.id);
   return { id: link.id };
 }

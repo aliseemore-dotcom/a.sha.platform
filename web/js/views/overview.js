@@ -80,6 +80,7 @@ export function renderOverview(slot, { params, session, query }) {
   // подписав кнопку «Вернуться к проекту» (докс/specs/03-tasks.md, §5.3).
   const taskUrl = (id) => withFrom(`/events/${encodeURIComponent(params.eventId)}/tasks/${encodeURIComponent(id)}`, overviewUrl);
   const allTasksUrl = withFrom(`/events/${encodeURIComponent(params.eventId)}/tasks`, query.get('from'));
+  const budgetUrl = withFrom(`/events/${encodeURIComponent(params.eventId)}/budget`, query.get('from'));
   const canArchive = session.user.role === 'owner';
   const canRetryPlan = session.permissions.createEvent;
 
@@ -297,11 +298,17 @@ export function renderOverview(slot, { params, session, query }) {
     }
   }
 
+  // Смета: у каждого выбранного подрядчика есть связанная строка расхода (docs/specs/06-budget.md),
+  // поэтому убрать из свадьбы — это ещё и решить её судьбу. Два последовательных подтверждения
+  // вместо отдельного диалога: это разовое редкое действие, а не то, ради чего стоит вводить
+  // новый компонент.
   async function removeVendor(v, button) {
     if (!window.confirm(`Убрать «${v.name}» из этой свадьбы? Личная запись сохранится.`)) return;
+    const budgetAction = window.confirm('Удалить также его строку из сметы?\n\nОтмена — оставить как отдельный расход.')
+      ? 'delete' : 'keep';
     button.disabled = true;
     try {
-      await api.removeEventVendor(params.eventId, v.id);
+      await api.removeEventVendor(params.eventId, v.id, budgetAction);
       announce('Подрядчик убран из свадьбы', 0);
       loadVendors();
     } catch {
@@ -363,7 +370,8 @@ export function renderOverview(slot, { params, session, query }) {
     return h('section', { class: 'zone', 'aria-labelledby': 'zone-vendors' },
       h('div', { class: 'zone__head' },
         h('h2', { class: 'zone__title', id: 'zone-vendors' }, `Подрядчики${vendors?.length ? ` · ${vendors.length}` : ''}`),
-        pickBtn,
+        h('div', { class: 'zone__head-actions' }, pickBtn,
+          h('a', { class: 'btn btn--secondary btn--small', href: budgetUrl }, 'Смета →')),
       ),
       body,
     );

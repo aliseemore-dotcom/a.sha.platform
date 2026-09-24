@@ -115,3 +115,10 @@ export function projectStage(card, timeZone, now = Date.now()) {
 export function countWeddings(n) {
   return `${n} ${pluralize(n, 'свадьба', 'свадьбы', 'свадеб')}`;
 }
+
+const moneyFmt = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
+
+/** «50 000 ₽ RUB» — без символа валюты, если он не задан отдельным словарём (currencies.js). */
+export function formatMoney(amount, currencyLabel) {
+  return `${moneyFmt.format(amount)}${currencyLabel ? ` ${currencyLabel}` : ''}`;
+}

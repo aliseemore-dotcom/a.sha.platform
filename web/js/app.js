@@ -8,6 +8,7 @@ import { renderOverview } from './views/overview.js';
 import { renderTaskList } from './views/taskList.js';
 import { renderTaskDetail } from './views/taskDetail.js';
 import { renderVendors } from './views/vendors.js';
+import { renderBudget } from './views/budget.js';
 
 const root = document.getElementById('root');
 let cleanup = null;
@@ -28,6 +29,8 @@ function match(pathname) {
   // Список всех задач проекта («Задачи мероприятия»): поиск, фильтры, сортировка, создание.
   m = pathname.match(/^\/events\/([A-Za-z0-9_-]+)\/tasks$/);
   if (m) return { view: 'tasks', params: { eventId: m[1] } };
+  m = pathname.match(/^\/events\/([A-Za-z0-9_-]+)\/budget$/);
+  if (m) return { view: 'budget', params: { eventId: m[1] } };
   if (pathname === '/') return { redirect: '/events' };
   return { view: 'notFound' };
 }
@@ -162,6 +165,7 @@ async function render() {
   else if (route.view === 'overview') cleanup = renderOverview(slot, ctx);
   else if (route.view === 'tasks') cleanup = renderTaskList(slot, ctx);
   else if (route.view === 'taskDetail') cleanup = renderTaskDetail(slot, ctx);
+  else if (route.view === 'budget') cleanup = renderBudget(slot, ctx);
   else slot.append(notFound());
 }
 

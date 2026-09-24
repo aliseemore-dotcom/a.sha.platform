@@ -6,6 +6,8 @@ import { h } from '../dom.js';
 import { api } from '../api.js';
 import { openVendorDialog } from '../ui/vendorDialog.js';
 import { VENDOR_CATEGORIES } from '../vendorCategories.js';
+import { CURRENCY_LABEL } from '../currencies.js';
+import { formatMoney } from '../format.js';
 
 function newKey() {
   return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -66,8 +68,10 @@ export function openVendorPickerPanel({ opener, eventId, onAdded }) {
         updateSubmit();
       },
     });
+    const priceText = v.price != null ? formatMoney(v.price, CURRENCY_LABEL[v.currency]) : null;
     return h('li', { class: 'checklist-item' },
-      h('label', { class: 'checkbox checklist-item__check', for: id }, checkbox, h('span', {}, v.name)));
+      h('label', { class: 'checkbox checklist-item__check', for: id }, checkbox, h('span', {}, v.name)),
+      priceText ? h('span', { class: 'checklist-item__status' }, priceText) : null);
   }
 
   function renderItems() {

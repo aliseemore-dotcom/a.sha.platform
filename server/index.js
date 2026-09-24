@@ -20,6 +20,9 @@ import { listVendors, createVendor, updateVendor, deleteVendor } from './vendors
 import {
   listEventVendors, addEventVendors, updateEventVendorStatus, removeEventVendor,
 } from './eventVendors.js';
+import {
+  getBudget, setCurrency, addManualLine, updateBudgetLine, removeBudgetLine,
+} from './budget.js';
 import { ServiceError } from './errors.js';
 import { hasPermission } from './access.js';
 import { isValidTimeZone } from './time.js';
@@ -241,7 +244,10 @@ async function handleApi(req, res, url) {
       const body = await readJson(req);
       return json(res, 200, updateEventVendorStatus(ctx, eventId, linkId, body?.status));
     }
-    if (method === 'DELETE') return json(res, 200, removeEventVendor(ctx, eventId, linkId));
+    if (method === 'DELETE') {
+      const body = await readJson(req).catch(() => null);
+      return json(res, 200, removeEventVendor(ctx, eventId, linkId, body?.budgetAction));
+    }
   }
 
   const eventVendorList = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/vendors$/);
@@ -249,6 +255,31 @@ async function handleApi(req, res, url) {
     const [, eventId] = eventVendorList;
     if (method === 'GET') return json(res, 200, listEventVendors(ctx, eventId));
     if (method === 'POST') return json(res, 200, addEventVendors(ctx, eventId, await readJson(req)));
+  }
+
+  // ---------- смета свадьбы ----------
+
+  const budgetRoot = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/budget$/);
+  if (budgetRoot) {
+    const [, eventId] = budgetRoot;
+    if (method === 'GET') return json(res, 200, getBudget(ctx, eventId));
+    if (method === 'PATCH') {
+      const body = await readJson(req);
+      return json(res, 200, setCurrency(ctx, eventId, body?.currency));
+    }
+  }
+
+  const budgetLines = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/budget\/lines$/);
+  if (budgetLines) {
+    const [, eventId] = budgetLines;
+    if (method === 'POST') return json(res, 201, addManualLine(ctx, eventId, await readJson(req)));
+  }
+
+  const budgetLineItem = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/budget\/lines\/([A-Za-z0-9_-]{1,64})$/);
+  if (budgetLineItem) {
+    const [, eventId, lineId] = budgetLineItem;
+    if (method === 'PATCH') return json(res, 200, updateBudgetLine(ctx, eventId, lineId, await readJson(req)));
+    if (method === 'DELETE') return json(res, 200, removeBudgetLine(ctx, eventId, lineId));
   }
 
   const m = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})(?:\/(archive|restore|plan))?$/);

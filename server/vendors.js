@@ -3,6 +3,7 @@
 // свои записи. Все функции получают ctx = { store, user, now }.
 
 import { ServiceError } from './errors.js';
+import { CURRENCIES, DEFAULT_CURRENCY } from './currencies.js';
 
 export const CATEGORIES = [
   'Ведущий', 'Декоратор', 'Фотограф', 'Видеограф', 'Флорист',
@@ -13,6 +14,7 @@ export const NAME_MAX = 150;
 export const PHONE_MAX = 40;
 export const LINK_MAX = 300;
 export const NOTE_MAX = 1000;
+export const PRICE_MAX = 100_000_000;
 
 const notFound = () => new ServiceError(404, 'not_found', 'Подрядчик не найден или недоступен');
 
@@ -52,6 +54,20 @@ function validateFields(body, { partial }) {
     if (v === undefined) fields.note = `Не более ${NOTE_MAX} символов`;
     else patch.note = v;
   }
+  // Полная стоимость услуги целиком, не цена за час (docs/specs/06-budget.md). Пустое значение —
+  // «цена не указана», а не 0: смета не должна принимать отсутствие данных за нулевую стоимость.
+  if ('price' in body) {
+    if (body.price === null || body.price === '') patch.price = null;
+    else {
+      const n = Number(body.price);
+      if (!Number.isFinite(n) || n < 0 || n > PRICE_MAX) fields.price = 'Укажите стоимость числом';
+      else patch.price = n;
+    }
+  }
+  if ('currency' in body) {
+    if (!CURRENCIES.includes(body.currency)) fields.currency = 'Выберите валюту';
+    else patch.currency = body.currency;
+  }
 
   if (Object.keys(fields).length) throw new ServiceError(422, 'validation', 'Проверьте поля формы', fields);
   return patch;
@@ -61,6 +77,7 @@ export function publicVendor(v) {
   return {
     id: v.id, category: v.category, name: v.name,
     phone: v.phone ?? null, link: v.link ?? null, note: v.note ?? null,
+    price: v.price ?? null, currency: v.currency ?? DEFAULT_CURRENCY,
     createdAt: v.createdAt, updatedAt: v.updatedAt,
   };
 }
@@ -88,7 +105,7 @@ export function createVendor(ctx, body) {
   const vendor = {
     id: ctx.store.newId('vnd'),
     userId: ctx.user.id,
-    phone: null, link: null, note: null,
+    phone: null, link: null, note: null, price: null, currency: DEFAULT_CURRENCY,
     ...patch,
     createdAt: nowIso,
     updatedAt: nowIso,

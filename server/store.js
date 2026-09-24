@@ -14,6 +14,9 @@ export function createStore() {
   const vendors = new Map();          // личная база подрядчиков пользователя
   const eventVendors = new Map();     // подрядчики, добавленные в конкретную свадьбу (копия данных)
   const eventVendorsByEvent = new Map();
+  const budgets = new Map();          // eventId → { eventId, currency }
+  const budgetLines = new Map();
+  const budgetLinesByEvent = new Map();
 
   return {
     newId(prefix) {
@@ -113,6 +116,42 @@ export function createStore() {
     eventVendorsForEvent(eventId) { return eventVendorsByEvent.get(eventId) ?? []; },
     findEventVendorBySource(eventId, sourceVendorId) {
       return (eventVendorsByEvent.get(eventId) ?? []).find((ev) => ev.sourceVendorId === sourceVendorId) ?? null;
+    },
+
+    insertBudget(b) { budgets.set(b.eventId, b); },
+    getBudget(eventId) { return budgets.get(eventId) ?? null; },
+    updateBudget(eventId, patch) {
+      const b = budgets.get(eventId);
+      if (!b) return null;
+      Object.assign(b, patch);
+      return b;
+    },
+
+    insertBudgetLine(l) {
+      budgetLines.set(l.id, l);
+      if (!budgetLinesByEvent.has(l.eventId)) budgetLinesByEvent.set(l.eventId, []);
+      budgetLinesByEvent.get(l.eventId).push(l);
+    },
+    getBudgetLine(id) { return budgetLines.get(id) ?? null; },
+    updateBudgetLine(id, patch) {
+      const l = budgetLines.get(id);
+      if (!l) return null;
+      Object.assign(l, patch);
+      return l;
+    },
+    deleteBudgetLine(id) {
+      const l = budgetLines.get(id);
+      if (!l) return;
+      budgetLines.delete(id);
+      const list = budgetLinesByEvent.get(l.eventId);
+      if (list) {
+        const i = list.findIndex((x) => x.id === id);
+        if (i >= 0) list.splice(i, 1);
+      }
+    },
+    budgetLinesForEvent(eventId) { return budgetLinesByEvent.get(eventId) ?? []; },
+    findBudgetLineByEventVendor(eventId, eventVendorId) {
+      return (budgetLinesByEvent.get(eventId) ?? []).find((l) => l.sourceEventVendorId === eventVendorId) ?? null;
     },
   };
 }

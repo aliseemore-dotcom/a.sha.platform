@@ -83,6 +83,14 @@ export const api = {
   addEventVendors: (eventId, body) => request('POST', `/api/events/${encodeURIComponent(eventId)}/vendors`, body),
   updateEventVendorStatus: (eventId, linkId, status) => request('PATCH',
     `/api/events/${encodeURIComponent(eventId)}/vendors/${encodeURIComponent(linkId)}`, { status }),
-  removeEventVendor: (eventId, linkId) => request('DELETE',
-    `/api/events/${encodeURIComponent(eventId)}/vendors/${encodeURIComponent(linkId)}`),
+  removeEventVendor: (eventId, linkId, budgetAction) => request('DELETE',
+    `/api/events/${encodeURIComponent(eventId)}/vendors/${encodeURIComponent(linkId)}`, { budgetAction }),
+
+  getBudget: (eventId, opts) => request('GET', `/api/events/${encodeURIComponent(eventId)}/budget`, undefined, opts),
+  setBudgetCurrency: (eventId, currency) => request('PATCH', `/api/events/${encodeURIComponent(eventId)}/budget`, { currency }),
+  addBudgetLine: (eventId, body) => request('POST', `/api/events/${encodeURIComponent(eventId)}/budget/lines`, body),
+  updateBudgetLine: (eventId, lineId, body) => request('PATCH',
+    `/api/events/${encodeURIComponent(eventId)}/budget/lines/${encodeURIComponent(lineId)}`, body),
+  removeBudgetLine: (eventId, lineId) => request('DELETE',
+    `/api/events/${encodeURIComponent(eventId)}/budget/lines/${encodeURIComponent(lineId)}`),
 };

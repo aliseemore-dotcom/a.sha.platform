@@ -5,6 +5,8 @@ import { h, clear, announce } from '../dom.js';
 import { api } from '../api.js';
 import { openVendorDialog } from '../ui/vendorDialog.js';
 import { VENDOR_CATEGORIES } from '../vendorCategories.js';
+import { CURRENCY_LABEL } from '../currencies.js';
+import { formatMoney } from '../format.js';
 
 const SEARCH_DEBOUNCE = 300;
 
@@ -73,11 +75,13 @@ export function renderVendors(slot) {
   }
 
   function vendorRow(v) {
+    const price = v.price != null ? formatMoney(v.price, CURRENCY_LABEL[v.currency]) : null;
     const meta = [v.phone, v.link].filter(Boolean).join(' · ');
     return h('li', { class: 'vendor-row' },
       h('div', { class: 'vendor-row__main' },
         h('span', { class: 'chip chip--planned' }, h('span', { class: 'shape shape--planned', 'aria-hidden': 'true' }), v.category),
         h('span', { class: 'vendor-row__name' }, v.name),
+        price ? h('span', { class: 'vendor-row__price' }, price) : h('span', { class: 'vendor-row__price vendor-row__price--empty' }, 'Стоимость не указана'),
       ),
       meta ? h('p', { class: 'vendor-row__meta' }, meta) : null,
       v.note ? h('p', { class: 'vendor-row__note' }, v.note) : null,
