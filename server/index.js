@@ -9,13 +9,13 @@ import { fileURLToPath } from 'node:url';
 
 import { createStore } from './store.js';
 import {
-  listEvents, listAttention, getEvent, createEvent, retryPlan,
+  listEvents, listAttention, getEvent, createEvent, updateEvent, retryPlan,
   archiveEvent, restoreEvent,
 } from './events.js';
 import {
   listTasks, createTask, getTask, updateTask, completeTask, restoreTask as restoreTaskAction,
 } from './tasks.js';
-import { getChecklist, addChecklistItems } from './checklist.js';
+import { getChecklist, addChecklistItems, rescheduleTasks } from './checklist.js';
 import { listVendors, createVendor, updateVendor, deleteVendor } from './vendors.js';
 import {
   listEventVendors, addEventVendors, updateEventVendorStatus, removeEventVendor,
@@ -196,6 +196,13 @@ async function handleApi(req, res, url) {
       : restoreTaskAction(ctx, eventId, taskId));
   }
 
+  // Отдельно и раньше общего /tasks/:id — иначе «reschedule» читался бы как taskId.
+  const reschedule = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/tasks\/reschedule$/);
+  if (reschedule && method === 'POST') {
+    const [, eventId] = reschedule;
+    return json(res, 200, rescheduleTasks(ctx, eventId, await readJson(req)));
+  }
+
   const taskItem = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/tasks\/([A-Za-z0-9_-]{1,64})$/);
   if (taskItem) {
     const [, eventId, taskId] = taskItem;
@@ -286,6 +293,7 @@ async function handleApi(req, res, url) {
   if (m) {
     const [, id, action] = m;
     if (!action && method === 'GET') return json(res, 200, getEvent(ctx, id));
+    if (!action && method === 'PATCH') return json(res, 200, updateEvent(ctx, id, await readJson(req)));
     if (method === 'POST') {
       await readJson(req);
       if (action === 'archive') return json(res, 200, archiveEvent(ctx, id));

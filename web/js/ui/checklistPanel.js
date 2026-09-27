@@ -18,6 +18,7 @@ export function openChecklistPanel({ opener, eventId, onAdded }) {
   let loaded = null; // ответ GET /checklist
   const checked = new Set();     // ключи выбранных (ещё не добавленных) пунктов
   const dueDates = new Map();    // key → значение поля даты (может быть пустым, если убрали)
+  const edited = new Set();      // ключи, где организатор тронул предложенную дату (докс/07, §3.3)
 
   const banner = h('div', { class: 'banner banner--error', role: 'alert', hidden: true });
   const body = h('div', { class: 'dialog__body' }, banner, h('p', { class: 'muted' }, 'Загружаем…'));
@@ -71,11 +72,12 @@ export function openChecklistPanel({ opener, eventId, onAdded }) {
         type: 'date', class: 'input checklist-item__date', 'aria-label': `Срок: ${item.title}`,
         value: dueDates.get(item.key) ?? '',
         max: loaded.eventDate,
-        onchange: (e) => dueDates.set(item.key, e.currentTarget.value),
+        onchange: (e) => { dueDates.set(item.key, e.currentTarget.value); edited.add(item.key); },
       });
     }
     return h('li', { class: 'checklist-item' },
       h('label', { class: 'checkbox checklist-item__check', for: id }, checkbox, h('span', {}, item.title)),
+      item.ruleLabel ? h('span', { class: 'checklist-item__rule caption' }, item.ruleLabel) : null,
       dateInput,
     );
   }
@@ -126,7 +128,7 @@ export function openChecklistPanel({ opener, eventId, onAdded }) {
     saving = true;
     banner.hidden = true;
     updateSubmit();
-    const items = [...checked].map((key) => ({ key, dueDate: dueDates.get(key) || null }));
+    const items = [...checked].map((key) => ({ key, dueDate: dueDates.get(key) || null, edited: edited.has(key) }));
     try {
       await api.addChecklistItems(eventId, { items, idempotencyKey });
       saving = false;

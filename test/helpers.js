@@ -29,7 +29,7 @@ export function setup() {
       id: over.id ?? `task_${++seq}`, eventId, title: 'Задача', status: 'todo',
       dueAt: null, dueDate: null, followUpAt: null, waitingFrom: null, assigneeId: null,
       isBlocked: false, blockedReason: null, description: null,
-      completedAt: null, completedBy: null, previousStatus: null,
+      completedAt: null, completedBy: null, previousStatus: null, dueDateSource: null,
       createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', ...over,
     };
     store.insertTask(t);

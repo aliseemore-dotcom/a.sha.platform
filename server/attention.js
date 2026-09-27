@@ -117,6 +117,43 @@ export function activePreview(tasks, attentionIds, timeZone) {
 }
 
 /**
+ * «Дальше» (ТЗ 07, §5.1): открытые `todo`-задачи со сроком в ближайшие `horizonDays` дней
+ * (с завтрашнего дня включительно), не показанные в «Требует внимания». `in_progress`/`waiting`
+ * туда не попадают никогда — они уже показаны в «В работе»/«Ждём ответа». Считается на сервере,
+ * а не только на клиенте, чтобы число на обзоре и на карточке списка не расходилось.
+ */
+export function upcomingTasks(tasks, attentionIds, usersById, timeZone, now, horizonDays = 14) {
+  const today = localDate(now, timeZone);
+  const tomorrow = addDays(today, 1);
+  const horizon = addDays(today, horizonDays);
+  const dueDay = (t) => (t.dueAt ? localDate(Date.parse(t.dueAt), timeZone) : t.dueDate);
+  const sortValue = (t) => (t.dueAt ? Date.parse(t.dueAt) : Date.parse(`${t.dueDate}T23:59:59`));
+
+  const withDue = tasks.filter((t) => t.status === 'todo' && !attentionIds.has(t.id) && dueDay(t));
+  const inWindow = withDue.filter((t) => dueDay(t) >= tomorrow && dueDay(t) <= horizon);
+  inWindow.sort((a, b) =>
+    sortValue(a) - sortValue(b)
+    || (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0)
+    || (a.id < b.id ? -1 : 1));
+
+  let nearestBeyond = null;
+  if (!inWindow.length) {
+    const beyond = withDue.filter((t) => dueDay(t) > horizon).sort((a, b) => sortValue(a) - sortValue(b));
+    nearestBeyond = beyond[0] ?? null;
+  }
+
+  const toPublic = (t) => ({
+    id: t.id, title: t.title, dueAt: t.dueAt ?? null, dueDate: t.dueDate ?? null,
+    ownerName: usersById.get(t.assigneeId)?.name ?? null, targetUrl: taskTargetUrl(t),
+  });
+  return {
+    items: inWindow.map(toPublic),
+    nearestBeyond: nearestBeyond ? toPublic(nearestBeyond) : null,
+    hasAnyDue: withDue.length > 0,
+  };
+}
+
+/**
  * Ближайший момент, когда классификация может измениться сама по себе:
  * наступление dueAt или начало следующего календарного дня.
  */

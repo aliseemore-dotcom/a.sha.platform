@@ -3,6 +3,7 @@
 import { h } from '../dom.js';
 import {
   attentionLabel, dayNumber, monthYear, fullDate, relativeDay, pluralize, projectStage,
+  monthLabel, relativeMonths, upcomingDueLabel,
 } from '../format.js';
 
 const KIND_TONE = { overdue: 'blocked', blocked: 'blocked', due_today: 'soon' };
@@ -78,6 +79,16 @@ function dateBlock(card, timeZone, now) {
     return h('div', { class: 'dateblock dateblock--unknown' },
       h('span', { class: 'dateblock__unknown' }, 'Дата уточняется'));
   }
+  // Известен только месяц (ТЗ 07, §1.1) — крупное число заменяется подписью месяца/года,
+  // а «через N дней» — грубым «через ~N мес.».
+  if (card.eventDatePrecision === 'month') {
+    const rel = card.lifecycle === 'active' ? relativeMonths(card.eventDate, timeZone, now) : null;
+    return h('div', { class: 'dateblock dateblock--month', title: monthLabel(card.eventDate) },
+      h('span', { class: 'visually-hidden' }, `Месяц свадьбы: ${monthLabel(card.eventDate)}`),
+      h('span', { class: 'dateblock__month dateblock__month--big', 'aria-hidden': 'true' }, monthLabel(card.eventDate)),
+      rel ? h('span', { class: 'dateblock__rel', 'aria-hidden': 'true' }, rel) : null,
+    );
+  }
   const rel = card.lifecycle === 'active' ? relativeDay(card.eventDate, timeZone, now) : null;
   return h('div', { class: 'dateblock', title: fullDate(card.eventDate) },
     h('span', { class: 'visually-hidden' }, `Дата свадьбы: ${fullDate(card.eventDate)}`),
@@ -122,13 +133,39 @@ export function eventCard(card, { timeZone, now, canArchive, onRestore, fromHref
   }
 
   // «В работе» — отдельная подпись, поэтому соседство со «Срочно» не читается как противоречие.
+  // «Настройка: N из M» (§4.4): пока не все шаги готовы и «В работе» и так пусто, настройка
+  // заменяет собой пустую строку «пока нет задач в работе»; если задачи в работе есть, строка
+  // «В работе» остаётся, а настройка идёт мелкой подписью под ней. В архиве не показываем ни то,
+  // ни другое, как и на обзоре.
   let workBlock = null;
+  let setupCaption = null;
   if (!archived) {
-    workBlock = h('p', { class: 'card__work' },
-      h('span', { class: 'card__work-label' }, 'В работе: '),
-      card.activePreview.length
-        ? card.activePreview.map((t) => t.title).join('; ')
-        : h('span', { class: 'card__work-empty' }, 'пока нет задач в работе'));
+    const setupIncomplete = card.setup && card.setup.done < card.setup.total;
+    if (setupIncomplete && !card.activePreview.length) {
+      workBlock = h('p', { class: 'card__setup' }, `Настройка: ${card.setup.done} из ${card.setup.total}`);
+    } else {
+      workBlock = h('p', { class: 'card__work' },
+        h('span', { class: 'card__work-label' }, 'В работе: '),
+        card.activePreview.length
+          ? card.activePreview.map((t) => t.title).join('; ')
+          : h('span', { class: 'card__work-empty' }, 'пока нет задач в работе'));
+      if (setupIncomplete) {
+        setupCaption = h('p', { class: 'card__setup card__setup--caption' }, `Настройка: ${card.setup.done} из ${card.setup.total}`);
+      }
+    }
+  }
+
+  // «Дальше: {title} · {дата}» (§5.3) — ближайшая задача с сроком в 14-дневном окне.
+  let upcomingLine = null;
+  if (!archived && card.upcomingCount > 0 && card.upcomingPreview) {
+    const item = card.upcomingPreview;
+    const due = upcomingDueLabel(item.dueAt ? item.dueAt.slice(0, 10) : item.dueDate, timeZone, now);
+    const more = card.upcomingCount - 1;
+    upcomingLine = h('p', { class: 'card__upcoming' },
+      h('span', { class: 'card__upcoming-label' }, 'Дальше: '),
+      `${item.title} · ${due}`,
+      more > 0 ? h('span', { class: 'card__more' }, ` и ещё ${more}`) : null,
+    );
   }
 
   const actions = h('div', { class: 'card__actions' },
@@ -147,6 +184,8 @@ export function eventCard(card, { timeZone, now, canArchive, onRestore, fromHref
         h('h3', { class: 'card__title', id: titleId, title: card.title }, h('a', { href }, card.title)),
         urgentBlock,
         workBlock,
+        setupCaption,
+        upcomingLine,
       ),
       actions,
     ),

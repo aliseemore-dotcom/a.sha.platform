@@ -51,6 +51,19 @@ export function addDays(date, days) {
   return t.toISOString().slice(0, 10);
 }
 
+/** Разница в календарных днях между двумя датами YYYY-MM-DD (b − a). */
+export function daysBetween(a, b) {
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+}
+
+/** Последний день месяца даты `date` (YYYY-MM-DD), сама дата — первое число месяца. */
+export function lastDayOfMonth(date) {
+  const [y, m] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+}
+
 export function isValidDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [y, m, d] = value.split('-').map(Number);

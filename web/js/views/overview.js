@@ -11,8 +11,10 @@ import {
 } from '../ui/components.js';
 import { openChecklistPanel } from '../ui/checklistPanel.js';
 import { openVendorPickerPanel } from '../ui/vendorPickerPanel.js';
+import { openEditEventDialog } from '../ui/editEventDialog.js';
 import {
   fullDate, dateTimeIn, attentionLabel, projectStage, relativeDay, pluralize,
+  monthLabel, relativeMonths, upcomingDueLabel,
 } from '../format.js';
 import { defaultListLimit } from '../breakpoints.js';
 
@@ -89,6 +91,7 @@ export function renderOverview(slot, { params, session, query }) {
   let controller = new AbortController();
   let firstRender = true;
   let requiresExpanded = false;
+  let upcomingExpanded = false;
   let vendors = null;
   let vendorsError = false;
 
@@ -187,7 +190,7 @@ export function renderOverview(slot, { params, session, query }) {
    * совпадают. У задачи, которая одновременно in_progress/waiting, — маленький второй бейдж,
    * чтобы её не пришлось повторять строкой в блоке «В работе»/«Ждём ответа» ниже (§0, §2.3).
    */
-  function requiresSection(attention, tasksById, archived, timeZone, now) {
+  function requiresSection(attention, tasksById, archived, timeZone, now, hasAnyOpenTask, event) {
     const limit = defaultListLimit();
     const rows = requiresExpanded ? attention : attention.slice(0, limit);
     const toggle = attention.length > limit
@@ -217,7 +220,18 @@ export function renderOverview(slot, { params, session, query }) {
             title: item.title, meta: owner, tooltip, secondary,
           });
         })), toggle]
-        : h('p', { class: 'muted' }, archived ? 'Проект в архиве' : 'Сейчас нет задач, требующих срочного действия'),
+        : archived ? h('p', { class: 'muted' }, 'Проект в архиве')
+        : !hasAnyOpenTask
+          ? h('div', { class: 'empty-inline' },
+            h('p', { class: 'muted' }, 'Задач пока нет'),
+            h('button', {
+              type: 'button', class: 'btn btn--secondary btn--small',
+              onclick: (e) => openChecklistPanel({
+                opener: e.currentTarget, eventId: event.id,
+                onAdded: () => { announce('Задачи добавлены', 0); load(); },
+              }),
+            }, 'Добавить задачи'))
+          : h('p', { class: 'muted' }, 'Сейчас нет задач, требующих срочного действия'),
     );
   }
 
@@ -282,6 +296,101 @@ export function renderOverview(slot, { params, session, query }) {
     return h('section', { class: 'zone', id: 'section-waiting', 'aria-labelledby': 'zone-waiting', tabindex: '-1' },
       h('h2', { class: 'zone__title', id: 'zone-waiting' }, `Ждём ответа${all.length ? ` · ${all.length}` : ''}`),
       body,
+    );
+  }
+
+  /**
+   * «Дальше» (ТЗ 07, §5): todo-задачи со сроком в ближайшие 14 дней, посчитанные и
+   * продедуплицированные на сервере — то же число, что и на карточке списка.
+   */
+  function upcomingSection(upcoming, timeZone, now, event) {
+    const limit = defaultListLimit();
+    const rows = upcomingExpanded ? upcoming.items : upcoming.items.slice(0, limit);
+    const toggle = upcoming.items.length > limit
+      ? h('button', {
+        type: 'button', class: 'btn btn--secondary btn--small',
+        'aria-expanded': String(upcomingExpanded),
+        onclick: () => { upcomingExpanded = !upcomingExpanded; render(lastData); },
+      }, upcomingExpanded ? 'Свернуть' : `Показать все ${upcoming.items.length}`)
+      : null;
+
+    let body;
+    if (upcoming.items.length) {
+      body = [
+        h('ol', { class: 'attention__list attention__list--light' }, rows.map((item) => {
+          const due = upcomingDueLabel(item.dueAt ? item.dueAt.slice(0, 10) : item.dueDate, timeZone, now);
+          const meta = [item.ownerName ?? 'Не назначен'].filter(Boolean).join(' · ');
+          return taskRow({
+            href: taskUrl(item.id), tone: 'planned', chipLabel: due, title: item.title, meta,
+            tooltip: [due, item.title, meta].join('. '),
+          });
+        })),
+        toggle,
+      ];
+    } else if (upcoming.nearestBeyond) {
+      const dueText = fullDate(upcoming.nearestBeyond.dueAt ? upcoming.nearestBeyond.dueAt.slice(0, 10) : upcoming.nearestBeyond.dueDate);
+      body = h('p', { class: 'muted' },
+        h('a', { href: taskUrl(upcoming.nearestBeyond.id), class: 'link' }, `Ближайший срок — ${upcoming.nearestBeyond.title}, ${dueText}`));
+    } else if (!upcoming.hasAnyDue) {
+      body = h('p', { class: 'muted' },
+        'Задач со сроком нет', event.eventDatePrecision !== 'day' ? ' — укажите дату свадьбы, и задачи плана получат сроки.' : '.');
+    } else {
+      body = h('p', { class: 'muted' }, 'Задач со сроком нет');
+    }
+
+    return h('section', { class: 'zone', id: 'section-upcoming', 'aria-labelledby': 'zone-upcoming', tabindex: '-1' },
+      h('h2', { class: 'zone__title', id: 'zone-upcoming' }, `Дальше · 14 дней${upcoming.items.length ? ` · ${upcoming.items.length}` : ''}`),
+      body,
+    );
+  }
+
+  /** Настройка свадьбы (ТЗ 07, §4): исчезает, когда все пять шагов готовы; в архиве не показывается. */
+  function setupSection(event) {
+    if (event.lifecycle === 'archived') return null;
+    const { done, total, steps } = event.setup;
+    if (done >= total) return null;
+    const pct = Math.round((done / total) * 100);
+    const STEP = {
+      date: { label: 'Дата свадьбы', action: 'Указать дату', focus: 'date' },
+      couple: { label: 'Данные пары', action: 'Заполнить', focus: null },
+      plan: { label: 'План задач', action: 'Добавить задачи' },
+      vendors: { label: 'Подрядчики', action: 'Выбрать' },
+      budget: { label: 'Бюджет', action: 'Указать ориентир', focus: 'budget' },
+    };
+
+    function stepAction(step, opener) {
+      if (step.key === 'plan') {
+        openChecklistPanel({ opener, eventId: event.id, onAdded: () => { announce('Задачи добавлены', 0); load(); } });
+      } else if (step.key === 'vendors') {
+        openVendorPickerPanel({ opener, eventId: event.id, onAdded: () => { announce('Подрядчики добавлены', 0); loadVendors(); } });
+      } else {
+        openEditEventDialog({ opener, event, focus: STEP[step.key].focus, onSaved: load });
+      }
+    }
+
+    function stepRow(step) {
+      const meta = STEP[step.key];
+      if (step.done) {
+        return h('li', { class: 'setup-step setup-step--done' },
+          h('span', { class: 'shape shape--done', 'aria-hidden': 'true' }), h('span', {}, meta.label));
+      }
+      const monthOnly = step.key === 'date' && event.eventDatePrecision === 'month';
+      const text = monthOnly ? 'Известен только месяц — уточните день' : meta.label;
+      return h('li', { class: 'setup-step' },
+        h('span', { class: 'shape shape--planned', 'aria-hidden': 'true' }),
+        h('span', { class: 'setup-step__text' }, text),
+        h('button', {
+          type: 'button', class: 'btn btn--secondary btn--small',
+          onclick: (e) => stepAction(step, e.currentTarget),
+        }, monthOnly ? 'Уточнить дату' : meta.action));
+    }
+
+    // Ширина заливки — фиксированный набор классов, а не inline style: CSP страницы (style-src
+    // 'self') запрещает style="…", а done/total всегда целые из 5 шагов, поэтому шаг в 20% хватает.
+    return h('section', { class: 'setup-block', 'aria-labelledby': 'setup-heading' },
+      h('h2', { class: 'setup-block__title', id: 'setup-heading' }, `Настройка свадьбы · ${done} из ${total}`),
+      h('div', { class: 'setup-block__bar' }, h('div', { class: `setup-block__fill setup-block__fill--${pct}` })),
+      h('ul', { class: 'setup-block__list' }, steps.map(stepRow)),
     );
   }
 
@@ -394,7 +503,7 @@ export function renderOverview(slot, { params, session, query }) {
   let lastData = null;
 
   function render(data) {
-    const { event, attention, tasks, timeZone } = data;
+    const { event, attention, tasks, timeZone, upcoming } = data;
     lastData = data;
     clear(main);
     main.removeAttribute('aria-busy');
@@ -431,6 +540,7 @@ export function renderOverview(slot, { params, session, query }) {
     const tasksById = new Map(tasks.map((t) => [t.id, t]));
     const work = splitByStatus(tasks, 'in_progress', requiresIds);
     const waiting = splitByStatus(tasks, 'waiting', requiresIds);
+    const hasAnyOpenTask = tasks.some((t) => ['todo', 'in_progress', 'waiting'].includes(t.status));
 
     const statRow = h('nav', { class: 'stat-row', 'aria-label': 'Сводка по проекту' },
       statLink(attention.length, 'Требует внимания', 'section-requires', null),
@@ -468,9 +578,13 @@ export function renderOverview(slot, { params, session, query }) {
           rel ? h('span', { class: 'overview-meta__rel' }, rel) : null,
         ),
       ),
+      setupSection(event),
       statRow,
-      requiresSection(attention, tasksById, archived, timeZone, now),
-      h('div', { class: 'zones' }, workSection(work, timeZone), waitingSection(waiting, timeZone)),
+      requiresSection(attention, tasksById, archived, timeZone, now, hasAnyOpenTask, event),
+      upcomingSection(upcoming, timeZone, now, event),
+      hasAnyOpenTask
+        ? h('div', { class: 'zones' }, workSection(work, timeZone), waitingSection(waiting, timeZone))
+        : h('p', { class: 'muted zones-collapsed' }, 'Появятся, когда задачи возьмут в работу'),
       h('p', { class: 'overview-alltasks' }, h('a', { class: 'btn btn--secondary', href: allTasksUrl }, 'Открыть все задачи →')),
       vendorsSection(event, archived),
     ].filter(Boolean));

@@ -66,6 +66,40 @@ export function isPast(date, timeZone, now = Date.now()) {
   return date < localDate(now, timeZone);
 }
 
+function lastDayOfMonth(date) {
+  const [y, m] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+}
+
+/** Как `isPast`, но для даты с известным только месяцем — «прошло» после последнего дня месяца. */
+export function isPastPrecise(date, precision, timeZone, now = Date.now()) {
+  const cutoff = precision === 'month' ? lastDayOfMonth(date) : date;
+  return cutoff < localDate(now, timeZone);
+}
+
+/** «Июнь 2027» — для дат с известным только месяцем (первое число месяца). */
+export function monthLabel(date) {
+  const label = fmt('my', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(utcDate(date));
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/**
+ * Срок в блоке «Дальше» (ТЗ 07, §5.2): «Завтра», «Пт, 3 окт.» в пределах недели, иначе
+ * «через N дней».
+ */
+export function upcomingDueLabel(date, timeZone, now = Date.now()) {
+  const today = localDate(now, timeZone);
+  const diff = daysBetween(today, date);
+  if (diff === 1) return 'Завтра';
+  if (diff <= 6) {
+    const d = utcDate(date);
+    const weekday = fmt('wd-short', { weekday: 'short', timeZone: 'UTC' }).format(d).replace('.', '');
+    const dm = fmt('dm-short', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(d).replace(/\.$/, '');
+    return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}, ${dm}`;
+  }
+  return `через ${diff} ${pluralize(diff, 'день', 'дня', 'дней')}`;
+}
+
 /**
  * Текст метки срочности и полная подпись для title/aria.
  * @returns {{ label: string, detail: string | null }}
@@ -108,8 +142,22 @@ export function attentionLabel(item, timeZone, now = Date.now()) {
 /** Отображаемая стадия проекта. Сохранённый статус не меняется: это только подпись. */
 export function projectStage(card, timeZone, now = Date.now()) {
   if (card.lifecycle === 'archived') return { tone: 'planned', label: 'В архиве' };
-  if (card.eventDate && isPast(card.eventDate, timeZone, now)) return { tone: 'done', label: 'Завершение проекта' };
+  if (card.eventDate && isPastPrecise(card.eventDate, card.eventDatePrecision, timeZone, now)) {
+    return { tone: 'done', label: 'Завершение проекта' };
+  }
   return { tone: 'progress', label: 'В подготовке' };
+}
+
+/** «через ~4 мес.» — для дат с известным только месяцем (ТЗ 07, §1.1). */
+export function relativeMonths(date, timeZone, now = Date.now()) {
+  if (!date) return null;
+  const today = localDate(now, timeZone);
+  const [ty, tm] = today.split('-').map(Number);
+  const [ey, em] = date.split('-').map(Number);
+  const diff = (ey - ty) * 12 + (em - tm);
+  if (diff < 0) return null;
+  if (diff === 0) return 'в этом месяце';
+  return `через ~${diff} ${pluralize(diff, 'месяц', 'месяца', 'месяцев')}`;
 }
 
 export function countWeddings(n) {

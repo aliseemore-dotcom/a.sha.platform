@@ -37,6 +37,7 @@ export function blankTaskFields() {
     completedBy: null,
     previousStatus: null,
     assigneeId: null,
+    dueDateSource: null,
   };
 }
 
@@ -77,6 +78,7 @@ export function publicTask(ctx, t) {
     completedAt: t.completedAt ?? null,
     completedByName: store.getUser(t.completedBy)?.name ?? null,
     templateKey: t.templateKey ?? null,
+    dueDateSource: t.dueDateSource ?? null,
     attentionKind: classifyTask(t, now, timeZone),
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
@@ -253,6 +255,9 @@ function validateFields(body, event, store, { partial }) {
 
   // Срок выполнения: дата и необязательное время. Раздельные поля — не путать с контролем ожидания.
   if ('dueDate' in body || 'dueTime' in body || 'hasDue' in body) {
+    // Правка через PATCH — источник срока «ручной» (докс/specs/07-wedding-setup.md, §3.3), даже
+    // если срок убрали совсем: это тоже осознанное решение организатора, не значение из плана.
+    if (partial) patch.dueDateSource = 'manual';
     if (body.hasDue === false || (!body.dueDate && !body.hasDue)) {
       patch.dueAt = null;
       patch.dueDate = null;

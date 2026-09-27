@@ -479,6 +479,9 @@ a { color: inherit; }
 .card__top--photo .dateblock__rel { color: var(--ink-on-dark-secondary); }
 .dateblock--unknown { align-self: center; }
 .dateblock__unknown { font-weight: 600; color: var(--ink-secondary); }
+/* Известен только месяц (ТЗ 07, §1.1) — крупная подпись месяца вместо числа дня. */
+.dateblock--month { align-self: center; }
+.dateblock__month--big { margin-top: 0; font-size: clamp(20px, 2.4vw, 26px); font-weight: 600; }
 
 .card__body {
   display: flex; flex-direction: column; gap: var(--space-1);
@@ -513,6 +516,12 @@ a { color: inherit; }
 .card__work { color: var(--ink-primary); overflow-wrap: anywhere; }
 .card__work-label { color: var(--sky-ink); font-weight: 600; }
 .card__work-empty { color: var(--ink-secondary); }
+
+/* «Настройка: N из M» и «Дальше: …» — те же счётчики, что на обзоре (ТЗ 07, §4.4, §5.3). */
+.card__setup { color: var(--ink-secondary); }
+.card__setup--caption { font-size: var(--fs-caption); margin-top: var(--space-half); }
+.card__upcoming { color: var(--ink-primary); overflow-wrap: anywhere; }
+.card__upcoming-label { color: var(--ink-secondary); font-weight: 600; }
 
 .card__actions {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1);
@@ -688,6 +697,43 @@ a { color: inherit; }
 }
 .project-menu__item:hover { background: var(--surface-muted); }
 
+/* «Настройка свадьбы» (ТЗ 07, §4) — прогресс-бар и список незавершённых шагов; исчезает, когда
+   все шаги готовы (см. setupSection в overview.js). */
+.setup-block {
+  background: var(--surface-white);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-card);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.setup-block__title { font-size: var(--fs-heading); font-weight: 700; margin-bottom: var(--space-2); }
+.setup-block__bar {
+  height: 6px; border-radius: var(--radius-pill);
+  background: var(--surface-muted);
+  margin-bottom: var(--space-2);
+  overflow: hidden;
+}
+.setup-block__fill { height: 100%; width: 0; background: var(--olive-ink); border-radius: var(--radius-pill); }
+.setup-block__fill--20 { width: 20%; }
+.setup-block__fill--40 { width: 40%; }
+.setup-block__fill--60 { width: 60%; }
+.setup-block__fill--80 { width: 80%; }
+.setup-block__fill--100 { width: 100%; }
+.setup-block__list { display: grid; gap: var(--space-1); }
+.setup-step {
+  display: flex; align-items: center; gap: var(--space-1);
+  min-height: 44px;
+}
+.setup-step .shape--planned { color: var(--ink-secondary); }
+.setup-step--done .shape--done { color: var(--olive-ink); }
+.setup-step--done { color: var(--ink-secondary); }
+.setup-step__text { flex: 1 1 auto; overflow-wrap: anywhere; }
+.setup-step .btn { margin-left: auto; flex: none; }
+
+/* Пустое состояние внутри раздела (например, «Требует внимания» без задач) с кнопкой действия
+   рядом с текстом, а не отдельным блоком. */
+.empty-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
 /* Краткие числа (обзор проекта §1.2): каждое — переход к своему разделу, не отдельная метрика */
 .stat-row {
   display: flex; gap: var(--space-2);
@@ -708,6 +754,10 @@ a { color: inherit; }
 .stat:hover { border-color: var(--line-strong); }
 .stat__num { font-size: var(--fs-heading); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .stat__label { font-size: var(--fs-caption); color: var(--ink-secondary); }
+
+/* Когда нет ни одной незавершённой задачи, «В работе»/«Ждём ответа» — незачем в двух пустых
+   блоках повторять то же самое, что уже сказано в «Требует внимания» (§4.3). */
+.zones-collapsed { margin-bottom: var(--space-3); }
 
 .zones { display: grid; gap: var(--space-3); margin-bottom: var(--space-3); }
 @media (min-width: 1024px) { .zones { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
@@ -826,6 +876,57 @@ a { color: inherit; }
 
 .field-row { display: flex; gap: var(--space-1); }
 .field-row .field { flex: 1; min-width: 0; }
+@media (max-width: 479px) {
+  .field-row { flex-direction: column; gap: 0; }
+}
+
+/* ---------- диалог «Новая свадьба» ---------- */
+
+.title-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1); margin-top: -6px; }
+.title-preview { color: var(--ink-secondary); overflow-wrap: anywhere; }
+
+.radio-pills { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.radio-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 40px; padding: 0 var(--space-2);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-button);
+  cursor: pointer;
+}
+.radio-pill:has(input:checked) { background: var(--ink-primary); color: var(--ink-on-dark); border-color: var(--ink-primary); }
+.radio-pill input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+.disclosure-toggle {
+  display: flex; align-items: center; gap: 6px;
+  min-height: 44px; padding: 0; margin-top: var(--space-1);
+  background: none; border: none; color: var(--ink-primary); font-weight: 600; text-align: left; cursor: pointer;
+}
+.disclosure-toggle__caret { display: inline-block; transition: transform 0.15s ease; }
+.disclosure-toggle--open .disclosure-toggle__caret { transform: rotate(90deg); }
+.disclosure-body { display: grid; gap: var(--space-1); margin-top: var(--space-1); }
+
+/* ---------- контакты (диалог редактирования свадьбы) ---------- */
+
+.contacts-list { display: grid; gap: var(--space-2); margin-bottom: var(--space-1); }
+.contact-row {
+  display: grid; gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-button);
+  position: relative;
+}
+.contact-row .icon-btn { position: absolute; top: 4px; right: 4px; }
+
+/* ---------- диалог «Дата свадьбы изменилась» ---------- */
+
+.due-review-list { display: grid; gap: var(--space-1); list-style: none; margin: 0; padding: 0; }
+.due-review-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-2);
+  padding: var(--space-1);
+  border-bottom: 1px solid var(--line-soft);
+}
+.due-review-row__check { min-height: 0; margin: 0; flex: 1 1 auto; min-width: 160px; }
+.due-review-row__dates { color: var(--ink-secondary); font-size: var(--fs-caption); }
+.due-review-row__manual { color: var(--status-amber-ink); flex-basis: 100%; }
 textarea.input { min-height: 88px; padding: var(--space-1) var(--space-2); resize: vertical; }
 
 /* ---------- панель «Добавить задачи» ---------- */
@@ -843,6 +944,7 @@ textarea.input { min-height: 88px; padding: var(--space-1) var(--space-2); resiz
 .checklist-item--added { color: var(--ink-secondary); }
 .checklist-item__check { margin: 0; min-height: 0; }
 .checklist-item__status { font-size: var(--fs-caption); }
+.checklist-item__rule { color: var(--ink-secondary); margin-right: auto; }
 .checklist-item__date { width: 160px; }
 @media (max-width: 479px) {
   .checklist-item { flex-direction: column; align-items: flex-start; }
