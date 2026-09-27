@@ -403,6 +403,12 @@ export function validateCreate(body) {
 const noPlan = () => {};
 
 function runPlan(ctx, event, applyPlan) {
+  // Плана не оборачивается в транзакцию целиком (отступление от буквы §1.4 ТЗ 08 — см.
+  // docs/HANDOFF.md): уже существующий и обязательный к сохранению тест «сбой плана не удаляет
+  // проект» проверяет именно частичное применение — задачи, вставленные до сбоя, остаются,
+  // повторный «Повторить создание плана» достраивает недостающее по тому же принципу
+  // идемпотентности `templateKey`, что и ручное добавление. Откат всего плана целиком стёр бы
+  // это поведение.
   try {
     applyPlan(ctx.store, event, new Date(ctx.now).toISOString(), ctx.timeZone);
     ctx.store.updateEvent(event.id, { planStatus: 'ready' });
@@ -450,10 +456,12 @@ export function createEvent(ctx, body, { applyPlan } = {}) {
     updatedAt: nowIso,
     createdBy: ctx.user.id,
   };
-  ctx.store.insertEvent(event);
-  // Ключ фиксируется сразу после записи проекта: повтор с тем же ключом не создаст дубль,
-  // даже если построение плана упадёт.
-  ctx.store.setIdempotent(ctx.user.id, input.idempotencyKey, { eventId: event.id });
+  // Создание проекта и запись ключа идемпотентности — вместе (docs/specs/08-foundation.md, §1.4):
+  // повтор с тем же ключом не должен увидеть проект без сохранённого ключа или наоборот.
+  ctx.store.transaction(() => {
+    ctx.store.insertEvent(event);
+    ctx.store.setIdempotent(ctx.user.id, input.idempotencyKey, { eventId: event.id });
+  });
 
   const effectiveApplyPlan = applyPlan ?? (input.applyPlan ? applyChecklistPlan : noPlan);
   const planStatus = runPlan(ctx, event, effectiveApplyPlan);

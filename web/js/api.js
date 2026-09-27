@@ -48,8 +48,23 @@ const qs = (params = {}) => {
 export const api = {
   session: () => request('GET', '/api/session'),
   demoUsers: () => request('GET', '/api/demo-users'),
-  login: (userId) => request('POST', '/api/session', { userId }),
+  loginDemo: (userId) => request('POST', '/api/session', { userId }),
+  login: (email, password) => request('POST', '/api/session', { email, password }),
   logout: () => request('DELETE', '/api/session'),
+
+  getInvite: (token) => request('GET', `/api/invites/${encodeURIComponent(token)}`),
+  acceptInvite: (token, body) => request('POST', `/api/invites/${encodeURIComponent(token)}/accept`, body),
+
+  getWorkspace: () => request('GET', '/api/workspace'),
+  updateWorkspace: (body) => request('PATCH', '/api/workspace', body),
+
+  getTeam: () => request('GET', '/api/team'),
+  inviteTeamMember: (body) => request('POST', '/api/team/invite', body),
+  resetLinkFor: (userId) => request('POST', `/api/team/${encodeURIComponent(userId)}/reset-link`, {}),
+  updateTeamMember: (userId, body) => request('PATCH', `/api/team/${encodeURIComponent(userId)}`, body),
+
+  getEventMembers: (eventId, opts) => request('GET', `/api/events/${encodeURIComponent(eventId)}/members`, undefined, opts),
+  setEventMembers: (eventId, body) => request('PUT', `/api/events/${encodeURIComponent(eventId)}/members`, body),
 
   listEvents: (params, opts) => request('GET', `/api/events${qs(params)}`, undefined, opts),
   listAttention: (params, opts) => request('GET', `/api/events/attention${qs(params)}`, undefined, opts),

@@ -10,14 +10,14 @@
 
 ## Запуск
 
-Нужен Node.js 20 или новее, зависимостей нет.
+Нужен Node.js 22.13 или новее (нужен встроенный `node:sqlite`), npm-зависимостей нет.
 
 ```bash
-npm start      # http://localhost:3000 — тестовый стенд с демо-данными
+npm start      # http://localhost:3000 — тестовый стенд с демо-данными (DEMO=1 по умолчанию)
 npm test       # правила внимания и критерии приёмки на уровне сервиса
 ```
 
-На стенде вход — выбор демо-пользователя:
+На стенде (`DEMO=1`) вход — выбор демо-пользователя:
 
 | Пользователь | Что проверяет |
 |---|---|
@@ -26,26 +26,88 @@ npm test       # правила внимания и критерии приём�
 | Иван, member с `event:create` | пустое состояние «Здесь появятся ваши свадьбы» |
 | Сергей, owner другого пространства | чужие проекты не видны |
 
+### Пилот (`DEMO=0`)
+
+Постоянное хранилище (SQLite), вход по email/паролю, команда и приглашения
+(docs/specs/08-foundation.md). Переменные окружения:
+
+| Переменная | Обязательна | По умолчанию | Назначение |
+|---|---|---|---|
+| `DEMO` | нет | `1` | `0` включает пилотный режим (SQLite, реальный вход) |
+| `DATABASE_PATH` | при `DEMO=0` | `./data/app.db` | файл базы, должен быть на постоянном диске |
+| `DATABASE_BACKUP_DIR` | нет | `./data/backups` | куда складываются резервные копии |
+| `PUBLIC_URL` | при `DEMO=0` | `http://localhost:3000` | для проверки `Origin` и для ссылок приглашений |
+| `NODE_ENV` | нет | `development` | только для лога при старте |
+| `BACKUP_S3_BUCKET` и другие `BACKUP_S3_*` | нет | — | см. «Резервные копии» — без них выгрузки во внешнее хранилище нет |
+
+Первый запуск: создать пространство и владельца консольной командой, затем поднять сервер.
+
+```bash
+DATABASE_PATH=./data/app.db PUBLIC_URL=https://your-domain \
+  npm run admin -- create-workspace --name "Агентство Лес" \
+    --owner-email anna@example.com --owner-name "Анна" --time-zone Europe/Moscow
+# печатает одноразовую ссылку-приглашение — по ней владелец задаёт пароль
+
+DEMO=0 DATABASE_PATH=./data/app.db PUBLIC_URL=https://your-domain npm start
+```
+
+Другие команды консоли (работают с той же базой, сервер запускать не нужно):
+
+```bash
+npm run admin -- list-workspaces
+npm run admin -- reset-link --email anna@example.com
+npm run admin -- disable-user --email anna@example.com
+npm run admin -- backup-now
+```
+
+### Резервные копии и восстановление
+
+При `DEMO=0` сервер сам делает копию (`VACUUM INTO`) каждый день в 03:00 UTC в
+`DATABASE_BACKUP_DIR`; хранятся последние 14. Восстановление — **при остановленном сервере**:
+
+```bash
+npm run admin -- restore --file ./data/backups/app-2026-09-27T030000Z.db
+```
+
+Проверено вручную: создать копию → изменить данные → восстановить → данные вернулись к моменту
+копии.
+
+### `GET /healthz`
+
+`200 { ok: true }`, если база открыта и отвечает; `503`, если нет. Без сессии, для мониторинга
+хостинга.
+
 ## Структура
 
 ```
 server/
-  index.js        HTTP: API + раздача web/, сессии, CSP
-  events.js       список, поиск, сортировка, пагинация, создание, архив, задача (getEvent/completeTask)
-  attention.js    правила «Требует внимания» и «В работе» (чистые функции)
-  plan.js         стартовый план wedding_v1, идемпотентный
-  access.js       видимость проектов и разрешения — только на сервере
-  store.js        хранилище в памяти; заменяется на БД без изменения сервисов
-  time.js         календарные операции в поясе рабочего пространства
-  demo/seed.js    демо-данные стенда (DEMO=1 по умолчанию; DEMO=0 — пустой сервер)
+  index.js          HTTP: API + раздача web/, сессии, CSP, лог запросов без персональных данных
+  store.js          выбор реализации хранилища (память или SQLite) — интерфейс общий
+  store/memory.js   хранилище в памяти; демо-стенд и тесты
+  store/sqlite.js   хранилище на node:sqlite; пилот (DEMO=0)
+  db/migrate.js     применение файлов миграций по порядку, с журналом schema_migrations
+  db/migrations/    001_init.sql — вся схема пилота
+  auth/             пароли (scrypt), сессии, вход, ограничение попыток, приглашения
+  workspace.js      настройки пространства (название, часовой пояс), экспорт данных
+  team.js           «Команда»: приглашения, ссылки сброса, роли, права
+  eventMembers.js   участники конкретной свадьбы
+  backup.js         резервные копии по расписанию и по команде
+  mailer.js         точка расширения под будущую отправку писем — пока ничего не отправляет
+  events.js         список, поиск, сортировка, пагинация, создание, архив, задача
+  attention.js      правила «Требует внимания» и «В работе» (чистые функции)
+  checklist.js      стартовый план свадьбы, детерминированные сроки, пересчёт при смене даты
+  access.js         видимость проектов и разрешения — только на сервере
+  time.js           календарные операции в поясе рабочего пространства
+  demo/seed.js      демо-данные стенда (DEMO=1 по умолчанию; DEMO=0 — пустой сервер)
+bin/admin.js         консоль: create-workspace, list-workspaces, reset-link, disable-user, backup-now, restore
 web/
   fonts/              Involve (woff2) + OFL.txt
   styles/tokens.css   токены брендбука и @font-face
-  styles/app.css      обе страницы
-  js/views/           events («Мои мероприятия»), overview (обзор мероприятия + панель задачи), login (стенд)
-  js/ui/               карточка, строка задачи (attentionRow/taskRow), диалог «Новая свадьба»
+  styles/app.css      все страницы
+  js/views/           events, overview, tasks, budget, vendors, login, invite, team, workspaceSettings
+  js/ui/               диалоги: новая свадьба, редактирование, участники, чек-лист, подрядчики
   js/breakpoints.js    общая точка «мобильный/шире» для лимитов списков
-test/                 node:test
+test/                 node:test, включая контрактные тесты хранилища на обеих реализациях
 ```
 
 ## API
@@ -57,6 +119,20 @@ POST /api/events            { title, eventDate|null, locationName|null, idempote
 GET  /api/events/:id
 POST /api/events/:id/archive | /restore | /plan
 POST /api/events/:id/tasks/:taskId/complete
+
+# вход и команда (docs/specs/08-foundation.md)
+POST   /api/session          { email, password } при DEMO=0, { userId } при DEMO=1
+GET    /api/invites/:token   проверка ссылки приглашения/сброса — без сессии
+POST   /api/invites/:token/accept   { name?, password } — без сессии
+GET    /api/workspace
+PATCH  /api/workspace        { name?, timeZone?, expectedUpdatedAt }
+GET    /api/workspace/export скачивание всех данных пространства одним JSON
+GET    /api/team
+POST   /api/team/invite      { email, name, role, canCreateEvents }
+POST   /api/team/:userId/reset-link
+PATCH  /api/team/:userId     { status?, role?, canCreateEvents? }
+GET    /api/events/:id/members
+PUT    /api/events/:id/members   { userIds, expectedUpdatedAt }
 ```
 
 `GET /api/events` и `GET /api/events/:id` отдают карточки/задачи и агрегаты внимания из одного

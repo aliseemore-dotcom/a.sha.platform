@@ -20,14 +20,14 @@ export function seedDemo(store, now = Date.now()) {
   store.insertWorkspace({ id: 'ws_other', name: 'Другое агентство', timeZone: null });
 
   const users = [
-    { id: 'usr_elena', name: 'Елена', role: 'owner', workspaceId: 'ws_demo', permissions: [],
-      note: 'Владелец пространства: видит все проекты, может создавать' },
-    { id: 'usr_olga', name: 'Ольга', role: 'member', workspaceId: 'ws_demo', permissions: [],
-      note: 'Участник: видит два проекта, создавать не может' },
-    { id: 'usr_ivan', name: 'Иван', role: 'member', workspaceId: 'ws_demo', permissions: ['event:create'],
-      note: 'Участник с правом event:create, без проектов' },
-    { id: 'usr_other', name: 'Сергей', role: 'owner', workspaceId: 'ws_other', permissions: [],
-      note: 'Владелец другого пространства: чужие проекты не видит' },
+    { id: 'usr_elena', name: 'Елена', role: 'owner', workspaceId: 'ws_demo', permissions: [], status: 'active',
+      email: 'elena@demo.test', note: 'Владелец пространства: видит все проекты, может создавать' },
+    { id: 'usr_olga', name: 'Ольга', role: 'member', workspaceId: 'ws_demo', permissions: [], status: 'active',
+      email: 'olga@demo.test', note: 'Участник: видит два проекта, создавать не может' },
+    { id: 'usr_ivan', name: 'Иван', role: 'member', workspaceId: 'ws_demo', permissions: ['event:create'], status: 'active',
+      email: 'ivan@demo.test', note: 'Участник с правом event:create, без проектов' },
+    { id: 'usr_other', name: 'Сергей', role: 'owner', workspaceId: 'ws_other', permissions: [], status: 'active',
+      email: 'sergey@demo.test', note: 'Владелец другого пространства: чужие проекты не видит' },
   ];
   users.forEach((u) => store.insertUser(u));
 

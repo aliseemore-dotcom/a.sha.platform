@@ -8,10 +8,10 @@ export function setup() {
   const store = createStore();
   store.insertWorkspace({ id: 'ws1', name: 'Агентство', timeZone: TZ });
   store.insertWorkspace({ id: 'ws2', name: 'Чужое', timeZone: TZ });
-  const owner = { id: 'u_owner', name: 'Елена', role: 'owner', workspaceId: 'ws1', permissions: [] };
-  const member = { id: 'u_member', name: 'Ольга', role: 'member', workspaceId: 'ws1', permissions: [] };
-  const creator = { id: 'u_creator', name: 'Иван', role: 'member', workspaceId: 'ws1', permissions: ['event:create'] };
-  const stranger = { id: 'u_stranger', name: 'Сергей', role: 'owner', workspaceId: 'ws2', permissions: [] };
+  const owner = { id: 'u_owner', name: 'Елена', role: 'owner', workspaceId: 'ws1', permissions: [], status: 'active', email: 'owner@test.local' };
+  const member = { id: 'u_member', name: 'Ольга', role: 'member', workspaceId: 'ws1', permissions: [], status: 'active', email: 'member@test.local' };
+  const creator = { id: 'u_creator', name: 'Иван', role: 'member', workspaceId: 'ws1', permissions: ['event:create'], status: 'active', email: 'creator@test.local' };
+  const stranger = { id: 'u_stranger', name: 'Сергей', role: 'owner', workspaceId: 'ws2', permissions: [], status: 'active', email: 'stranger@test.local' };
   [owner, member, creator, stranger].forEach((u) => store.insertUser(u));
 
   let seq = 0;

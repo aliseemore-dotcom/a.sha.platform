@@ -1,13 +1,14 @@
-// HTTP-сервер: API экрана «Мои мероприятия» + раздача статического интерфейса.
-// Без зависимостей, Node ≥ 20.
+// HTTP-сервер: API + раздача статического интерфейса. Без npm-зависимостей.
+// DEMO=1 — тестовый стенд, хранилище в памяти с демо-данными, вход — выбор пользователя.
+// DEMO=0 — пилот: SQLite на постоянном диске, вход по email/паролю (docs/specs/08-foundation.md).
 
 import { createServer } from 'node:http';
+import { accessSync, constants as fsConstants, mkdirSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
-import { randomBytes } from 'node:crypto';
 import { extname, join, normalize, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createStore } from './store.js';
+import { createStore, createSqliteStore } from './store.js';
 import {
   listEvents, listAttention, getEvent, createEvent, updateEvent, retryPlan,
   archiveEvent, restoreEvent,
@@ -23,6 +24,13 @@ import {
 import {
   getBudget, setCurrency, addManualLine, updateBudgetLine, removeBudgetLine,
 } from './budget.js';
+import { getWorkspace, updateWorkspace, exportWorkspaceData } from './workspace.js';
+import { listTeam, inviteMember, resetLinkFor, updateTeamMember } from './team.js';
+import { getEventMembersView, setEventMembers } from './eventMembers.js';
+import { inspectInvite, acceptInvite } from './auth/invites.js';
+import { attemptLogin } from './auth/login.js';
+import { createSession, resolveSession, revokeSession } from './auth/sessions.js';
+import { runBackup, scheduleDailyBackup } from './backup.js';
 import { ServiceError } from './errors.js';
 import { hasPermission } from './access.js';
 import { isValidTimeZone } from './time.js';
@@ -31,16 +39,41 @@ import { seedDemo, DEMO_TIME_ZONE } from './demo/seed.js';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const PORT = Number(process.env.PORT ?? 3000);
 const DEMO = process.env.DEMO !== '0';
+const NODE_ENV = process.env.NODE_ENV ?? 'development';
+const PUBLIC_URL = process.env.PUBLIC_URL ?? `http://localhost:${PORT}`;
+const DATABASE_PATH = process.env.DATABASE_PATH ?? './data/app.db';
+const DATABASE_BACKUP_DIR = process.env.DATABASE_BACKUP_DIR ?? './data/backups';
 const BODY_LIMIT = 16 * 1024;
+const IDEMPOTENCY_MAX_AGE_MS = 7 * 86400_000;
 
-const store = createStore();
-if (DEMO) seedDemo(store);
+// ---------- хранилище ----------
+
+let store;
+let stopBackupSchedule = null;
+if (DEMO) {
+  store = createStore();
+  seedDemo(store);
+} else {
+  // Без постоянного диска данные теряются при каждом деплое (docs/specs/08-foundation.md, §6) —
+  // лучше отказаться стартовать сразу, с понятной причиной, чем молча терять свадьбы организаторов.
+  try {
+    mkdirSync(dirname(DATABASE_PATH), { recursive: true });
+    accessSync(dirname(DATABASE_PATH), fsConstants.W_OK);
+  } catch (err) {
+    console.error(`Каталог базы данных недоступен для записи (${DATABASE_PATH}): ${err.message}`);
+    console.error('Проверьте, что подключён постоянный диск и DATABASE_PATH указывает на него.');
+    process.exit(1);
+  }
+  store = createSqliteStore(DATABASE_PATH);
+  store.pruneIdempotency(Date.now() - IDEMPOTENCY_MAX_AGE_MS);
+  setInterval(() => store.pruneIdempotency(Date.now() - IDEMPOTENCY_MAX_AGE_MS), 24 * 3600_000).unref?.();
+  stopBackupSchedule = scheduleDailyBackup(store, DATABASE_BACKUP_DIR, (m) => console.error(m));
+}
 
 // ---------- сессии ----------
-// Системы входа в проекте пока нет. На тестовом стенде вход — выбор демо-пользователя.
-// Сессия — случайный идентификатор в HttpOnly cookie, данные сессии только на сервере.
-
-const sessions = new Map();
+// Cookie хранит только случайный токен; сервер ищет по хэшу токена (server/auth/sessions.js).
+// Secure и проверка Origin — только при DEMO=0, чтобы локальный запуск и демо работали по http
+// (docs/specs/08-foundation.md, §6).
 
 function readCookies(req) {
   const out = {};
@@ -51,14 +84,20 @@ function readCookies(req) {
   return out;
 }
 
-function currentUser(req) {
-  const sid = readCookies(req).sid;
-  const userId = sid && sessions.get(sid);
-  return userId ? store.getUser(userId) : null;
+function currentUser(req, now) {
+  return resolveSession(store, readCookies(req).sid, now);
 }
 
-function sessionCookie(value, maxAge) {
-  return `sid=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+function sessionCookie(value, maxAgeSeconds) {
+  const attrs = ['Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${maxAgeSeconds}`];
+  if (!DEMO) attrs.push('Secure');
+  return `sid=${value}; ${attrs.join('; ')}`;
+}
+
+function clientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  if (typeof fwd === 'string' && fwd.trim()) return fwd.split(',')[0].trim();
+  return req.socket.remoteAddress ?? 'unknown';
 }
 
 /** Внутренний безопасный путь для returnTo: только «/…», без «//» и схем. */
@@ -70,15 +109,18 @@ export function safeReturnTo(value) {
 }
 
 // ---------- часовой пояс ----------
-// Приоритет: настройка пространства → на тестовом стенде Europe/Moscow → пояс устройства
-// (заголовок X-Time-Zone от клиента) → UTC.
+// DEMO=1: пояс пространства → Europe/Moscow демо-стенда → пояс устройства (заголовок
+// X-Time-Zone) → UTC. DEMO=0: только пояс пространства (docs/specs/08-foundation.md, §3) —
+// заголовок клиента в расчётах больше не участвует, даже если клиент его пришлёт.
 
 function resolveTimeZone(user, req) {
   const ws = store.getWorkspace(user.workspaceId);
   if (ws?.timeZone && isValidTimeZone(ws.timeZone)) return ws.timeZone;
-  if (DEMO) return DEMO_TIME_ZONE;
-  const clientTz = req.headers['x-time-zone'];
-  if (isValidTimeZone(clientTz)) return clientTz;
+  if (DEMO) {
+    const clientTz = req.headers['x-time-zone'];
+    if (isValidTimeZone(clientTz)) return clientTz;
+    return DEMO_TIME_ZONE;
+  }
   return 'UTC';
 }
 
@@ -110,7 +152,7 @@ function apiError(res, status, code, message, fields) {
 
 async function readJson(req) {
   if (!(req.headers['content-type'] ?? '').startsWith('application/json')) {
-    // JSON-only защищает POST от межсайтовых форм (вместе с SameSite=Lax).
+    // JSON-only защищает POST от межсайтовых форм (вместе с SameSite=Lax и проверкой Origin).
     throw new ServiceError(415, 'unsupported_media_type', 'Ожидается application/json');
   }
   let size = 0;
@@ -127,11 +169,21 @@ async function readJson(req) {
   }
 }
 
+const MUTATING = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
+
+/** Заголовок Origin должен совпадать с PUBLIC_URL на изменяющих запросах (docs/specs/08-foundation.md, §2.3). */
+function checkOrigin(req) {
+  if (DEMO || !MUTATING.has(req.method)) return true;
+  return req.headers.origin === PUBLIC_URL;
+}
+
 // ---------- API ----------
 
-async function handleApi(req, res, url) {
+async function handleApi(req, res, url, now) {
   const { pathname } = url;
   const method = req.method;
+
+  if (!checkOrigin(req)) return apiError(res, 403, 'bad_origin', 'Запрос отклонён (Origin)');
 
   if (pathname === '/api/demo-users' && method === 'GET') {
     if (!DEMO) return apiError(res, 404, 'not_found', 'Не найдено');
@@ -141,26 +193,50 @@ async function handleApi(req, res, url) {
   }
 
   if (pathname === '/api/session' && method === 'POST') {
-    if (!DEMO) return apiError(res, 404, 'not_found', 'Вход не настроен');
+    if (DEMO) {
+      const body = await readJson(req);
+      const demoUser = store.getUser(body.userId);
+      if (!demoUser) return apiError(res, 400, 'bad_user', 'Пользователь не найден');
+      const { token } = createSession(store, demoUser.id, req.headers['user-agent'], now);
+      return json(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie(token, 60 * 60 * 24 * 30) });
+    }
     const body = await readJson(req);
-    const user = store.getUser(body.userId);
-    if (!user) return apiError(res, 400, 'bad_user', 'Пользователь не найден');
-    const sid = randomBytes(24).toString('base64url');
-    sessions.set(sid, user.id);
-    return json(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie(sid, 60 * 60 * 24 * 30) });
+    const result = attemptLogin(store, body.email, body.password, clientIp(req), req.headers['user-agent'], now);
+    if (!result.ok) return apiError(res, result.locked ? 429 : 401, result.locked ? 'locked' : 'invalid_credentials', result.message);
+    return json(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie(result.token, 60 * 60 * 24 * 30) });
   }
 
   if (pathname === '/api/session' && method === 'DELETE') {
     const sid = readCookies(req).sid;
-    if (sid) sessions.delete(sid);
+    if (sid) revokeSession(store, sid);
     return json(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie('', 0) });
   }
 
-  const user = currentUser(req);
+  // ---------- приглашения и сброс пароля: доступны без сессии ----------
+
+  const inviteMatch = pathname.match(/^\/api\/invites\/([A-Za-z0-9_-]{1,80})$/);
+  if (inviteMatch && method === 'GET') {
+    const check = inspectInvite(store, inviteMatch[1], now);
+    if (!check.ok) return apiError(res, 404, 'invalid_invite', check.message);
+    return json(res, 200, { email: check.invite.email, name: check.invite.name, kind: check.invite.kind });
+  }
+  const inviteAccept = pathname.match(/^\/api\/invites\/([A-Za-z0-9_-]{1,80})\/accept$/);
+  if (inviteAccept && method === 'POST') {
+    const body = await readJson(req);
+    const result = acceptInvite(store, inviteAccept[1], body, now);
+    if (!result.ok) {
+      const status = result.field ? 422 : 404;
+      return apiError(res, status, result.field ? 'validation' : 'invalid_invite', result.message, result.field ? { [result.field]: result.message } : undefined);
+    }
+    const { token } = createSession(store, result.user.id, req.headers['user-agent'], now);
+    return json(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie(token, 60 * 60 * 24 * 30) });
+  }
+
+  const user = currentUser(req, now);
   if (!user) return apiError(res, 401, 'unauthorized', 'Нужно войти');
 
   const ctx = {
-    store, user, now: Date.now(), timeZone: resolveTimeZone(user, req),
+    store, user, now, timeZone: resolveTimeZone(user, req),
     log: (m) => console.error(m),
   };
 
@@ -168,10 +244,35 @@ async function handleApi(req, res, url) {
     const ws = store.getWorkspace(user.workspaceId);
     return json(res, 200, {
       user: { id: user.id, name: user.name, role: user.role },
-      workspace: { id: ws.id, name: ws.name },
+      workspace: { id: ws.id, name: ws.name, timeZone: ws.timeZone ?? null },
       permissions: { createEvent: hasPermission(user, 'event:create') },
       demo: DEMO,
     });
+  }
+
+  if (pathname === '/api/workspace' && method === 'GET') return json(res, 200, getWorkspace(ctx));
+  if (pathname === '/api/workspace' && method === 'PATCH') return json(res, 200, updateWorkspace(ctx, await readJson(req)));
+  if (pathname === '/api/workspace/export' && method === 'GET') {
+    const data = exportWorkspaceData(ctx);
+    return send(res, 200, JSON.stringify(data, null, 2), {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Disposition': `attachment; filename="workspace-export-${new Date(now).toISOString().slice(0, 10)}.json"`,
+      'Cache-Control': 'no-store',
+    });
+  }
+
+  if (pathname === '/api/team' && method === 'GET') return json(res, 200, listTeam(ctx));
+  if (pathname === '/api/team/invite' && method === 'POST') return json(res, 201, inviteMember(ctx, await readJson(req)));
+  const teamReset = pathname.match(/^\/api\/team\/([A-Za-z0-9_-]{1,64})\/reset-link$/);
+  if (teamReset && method === 'POST') return json(res, 200, resetLinkFor(ctx, teamReset[1]));
+  const teamItem = pathname.match(/^\/api\/team\/([A-Za-z0-9_-]{1,64})$/);
+  if (teamItem && method === 'PATCH') return json(res, 200, updateTeamMember(ctx, teamItem[1], await readJson(req)));
+
+  const eventMembers = pathname.match(/^\/api\/events\/([A-Za-z0-9_-]{1,64})\/members$/);
+  if (eventMembers) {
+    const [, eventId] = eventMembers;
+    if (method === 'GET') return json(res, 200, getEventMembersView(ctx, eventId));
+    if (method === 'PUT') return json(res, 200, setEventMembers(ctx, eventId, await readJson(req)));
   }
 
   if (pathname === '/api/events' && method === 'GET') {
@@ -332,19 +433,28 @@ async function serveFile(res, relPath, cache = 'no-cache') {
   }
 }
 
+// Пути, доступные без сессии — экраны входа и приглашения/сброса пароля.
+const PUBLIC_PAGES = [/^\/login$/, /^\/invite\/[A-Za-z0-9_-]{1,80}$/];
+
 async function handle(req, res) {
   const url = new URL(req.url, 'http://localhost');
+  const now = Date.now();
   try {
-    if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
+    if (url.pathname === '/healthz') {
+      const ok = store.ping ? store.ping() : true;
+      return json(res, ok ? 200 : 503, { ok });
+    }
+
+    if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url, now);
 
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method Not Allowed');
 
     if (url.pathname.startsWith('/fonts/') && (await serveFile(res, url.pathname, 'public, max-age=604800'))) return;
     if (/^\/(styles|js)\//.test(url.pathname) && (await serveFile(res, url.pathname))) return;
 
-    // Страницы приложения. Без сессии — на вход с безопасным returnTo.
-    if (url.pathname === '/login') return void (await serveFile(res, 'index.html'));
-    if (!currentUser(req)) {
+    // Страницы приложения. Без сессии — на вход с безопасным returnTo, кроме публичных страниц.
+    if (PUBLIC_PAGES.some((re) => re.test(url.pathname))) return void (await serveFile(res, 'index.html'));
+    if (!currentUser(req, now)) {
       const returnTo = safeReturnTo(url.pathname + url.search);
       return send(res, 302, '', { Location: `/login?returnTo=${encodeURIComponent(returnTo)}` });
     }
@@ -357,10 +467,40 @@ async function handle(req, res) {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  createServer(handle).listen(PORT, () => {
-    console.log(`http://localhost:${PORT}  ${DEMO ? '(тестовый стенд, демо-данные)' : ''}`);
-  });
+// Лог запроса без персональных данных (docs/specs/08-foundation.md, §4): метод, путь с
+// заменёнными ID, статус, длительность, userId — никогда тело запроса/ответа, имена, email,
+// телефоны или пароли.
+const ID_SEGMENT = /^[a-z]+_[A-Za-z0-9_-]+$/i;
+function redactPath(pathname) {
+  return pathname.split('/').map((seg) => (ID_SEGMENT.test(seg) ? ':id' : seg)).join('/');
 }
 
-export { handle };
+async function loggedHandle(req, res) {
+  const start = Date.now();
+  const path = redactPath(new URL(req.url, 'http://localhost').pathname);
+  res.on('finish', () => {
+    const user = (() => { try { return currentUser(req, Date.now()); } catch { return null; } })();
+    console.error(`${req.method} ${path} ${res.statusCode} ${Date.now() - start}ms${user ? ` user=${user.id}` : ''}`);
+  });
+  return handle(req, res);
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const server = createServer(loggedHandle).listen(PORT, () => {
+    console.log(`http://localhost:${PORT}  ${DEMO ? '(тестовый стенд, демо-данные)' : `(${NODE_ENV})`}`);
+  });
+
+  // Корректная остановка: перестать принимать новые соединения, дождаться текущих, закрыть базу
+  // (docs/specs/08-foundation.md, §6).
+  function shutdown() {
+    console.error('Получен SIGTERM — останавливаюсь…');
+    stopBackupSchedule?.();
+    server.close(() => {
+      store.close?.();
+      process.exit(0);
+    });
+  }
+  process.on('SIGTERM', shutdown);
+}
+
+export { handle, runBackup, DATABASE_BACKUP_DIR };

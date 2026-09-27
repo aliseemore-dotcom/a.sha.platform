@@ -46,34 +46,39 @@ export function addEventVendors(ctx, eventId, body) {
 
   const requested = Array.isArray(body?.vendorIds) ? body.vendorIds : [];
   const nowIso = new Date(now).toISOString();
-  const created = [];
-  for (const vendorId of requested) {
-    const source = store.getVendor(vendorId);
-    if (!source || source.userId !== user.id) continue; // чужая или несуществующая запись — не добавляем
-    if (store.findEventVendorBySource(eventId, vendorId)) continue; // уже добавлен
+  // Подрядчик и его строка сметы создаются вместе — искусственный сбой посреди цикла не должен
+  // оставить одно без другого (docs/specs/08-foundation.md, §1.4).
+  const created = store.transaction(() => {
+    const out = [];
+    for (const vendorId of requested) {
+      const source = store.getVendor(vendorId);
+      if (!source || source.userId !== user.id) continue; // чужая или несуществующая запись — не добавляем
+      if (store.findEventVendorBySource(eventId, vendorId)) continue; // уже добавлен
 
-    const ev = {
-      id: store.newId('evnd'),
-      eventId,
-      sourceVendorId: vendorId,
-      category: source.category,
-      name: source.name,
-      phone: source.phone ?? null,
-      link: source.link ?? null,
-      note: source.note ?? null,
-      price: source.price ?? null,
-      currency: source.currency,
-      status: 'candidate',
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-    store.insertEventVendor(ev);
-    // Одна связанная строка сметы на подрядчика (docs/specs/06-budget.md) — создаётся один раз,
-    // здесь же, а не отдельным запросом с клиента: повторного добавления того же ev не будет
-    // (findEventVendorBySource выше), значит и вторая строка не появится.
-    createLineForVendor(store, eventId, ev, nowIso);
-    created.push(ev);
-  }
+      const ev = {
+        id: store.newId('evnd'),
+        eventId,
+        sourceVendorId: vendorId,
+        category: source.category,
+        name: source.name,
+        phone: source.phone ?? null,
+        link: source.link ?? null,
+        note: source.note ?? null,
+        price: source.price ?? null,
+        currency: source.currency,
+        status: 'candidate',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      store.insertEventVendor(ev);
+      // Одна связанная строка сметы на подрядчика (docs/specs/06-budget.md) — создаётся один раз,
+      // здесь же, а не отдельным запросом с клиента: повторного добавления того же ev не будет
+      // (findEventVendorBySource выше), значит и вторая строка не появится.
+      createLineForVendor(store, eventId, ev, nowIso);
+      out.push(ev);
+    }
+    return out;
+  });
 
   store.setIdempotent(user.id, key, { ids: created.map((e) => e.id) });
   return { added: created.length, items: created.map(publicEventVendor) };
@@ -115,7 +120,9 @@ export function removeEventVendor(ctx, eventId, linkId, budgetAction = 'delete')
   const { store, user, now } = ctx;
   const { event, link } = getOwnedLink(store, user, eventId, linkId);
   requireMutable(user, event);
-  resolveVendorLine(store, eventId, link.id, budgetAction === 'keep' ? 'keep' : 'delete', new Date(now).toISOString());
-  store.deleteEventVendor(link.id);
+  store.transaction(() => {
+    resolveVendorLine(store, eventId, link.id, budgetAction === 'keep' ? 'keep' : 'delete', new Date(now).toISOString());
+    store.deleteEventVendor(link.id);
+  });
   return { id: link.id };
 }

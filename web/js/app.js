@@ -9,6 +9,9 @@ import { renderTaskList } from './views/taskList.js';
 import { renderTaskDetail } from './views/taskDetail.js';
 import { renderVendors } from './views/vendors.js';
 import { renderBudget } from './views/budget.js';
+import { renderInvite } from './views/invite.js';
+import { renderTeam } from './views/team.js';
+import { renderWorkspaceSettings } from './views/workspaceSettings.js';
 
 const root = document.getElementById('root');
 let cleanup = null;
@@ -18,8 +21,12 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
 function match(pathname) {
   if (pathname === '/login') return { view: 'login' };
+  const inviteMatch = pathname.match(/^\/invite\/([A-Za-z0-9_-]{1,80})$/);
+  if (inviteMatch) return { view: 'invite', params: { token: inviteMatch[1] } };
   if (pathname === '/events') return { view: 'events' };
   if (pathname === '/vendors') return { view: 'vendors' };
+  if (pathname === '/settings/team') return { view: 'team' };
+  if (pathname === '/settings/workspace') return { view: 'workspaceSettings' };
   let m = pathname.match(/^\/events\/([A-Za-z0-9_-]+)\/overview$/);
   if (m) return { view: 'overview', params: { eventId: m[1] } };
   // Карточка задачи — отдельный маршрут («Задачи мероприятия», §5.3): работает после
@@ -73,6 +80,18 @@ const ROLE = { owner: 'Владелец', member: 'Участник' };
  * Шапка: на широком экране — название агентства; на узком оно уходит в меню профиля,
  * чтобы не обрезаться до «Тестовое агент…». «Выйти» — в меню, без переполнения строки.
  */
+/**
+ * «Время в пространстве» (docs/specs/08-foundation.md, §3) — только когда пояс устройства
+ * отличается от пояса пространства; помогает организатору в поездке не путать «Сегодня».
+ */
+function workspaceTimeCaption(workspace) {
+  if (!workspace.timeZone) return null;
+  const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (workspace.timeZone === deviceTz) return null;
+  const time = new Intl.DateTimeFormat('ru-RU', { timeZone: workspace.timeZone, hour: '2-digit', minute: '2-digit' }).format(new Date());
+  return `Время в пространстве: ${workspace.timeZone}, ${time}`;
+}
+
 function header() {
   const { user, workspace, demo } = session;
   const menuId = 'profile-menu';
@@ -80,7 +99,10 @@ function header() {
     h('p', { class: 'profile__name' }, user.name),
     h('p', { class: 'profile__meta' }, `${ROLE[user.role] ?? user.role} · ${workspace.name}`),
     demo ? h('p', { class: 'profile__meta' }, 'Тестовый стенд: данные вымышленные') : null,
+    workspaceTimeCaption(workspace) ? h('p', { class: 'profile__meta' }, workspaceTimeCaption(workspace)) : null,
     h('a', { class: 'btn btn--secondary profile__link', href: '/vendors' }, 'Мои подрядчики'),
+    user.role === 'owner' ? h('a', { class: 'btn btn--secondary profile__link', href: '/settings/team' }, 'Команда') : null,
+    user.role === 'owner' ? h('a', { class: 'btn btn--secondary profile__link', href: '/settings/workspace' }, 'Пространство') : null,
     h('button', {
       type: 'button', class: 'btn btn--secondary profile__logout',
       onclick: async () => {
@@ -139,6 +161,13 @@ async function render() {
     return;
   }
 
+  if (route.view === 'invite') {
+    clear(root);
+    root.removeAttribute('aria-busy');
+    cleanup = renderInvite(root, { params: route.params, navigate });
+    return;
+  }
+
   if (!session) {
     try {
       session = await api.session();
@@ -166,6 +195,8 @@ async function render() {
   else if (route.view === 'tasks') cleanup = renderTaskList(slot, ctx);
   else if (route.view === 'taskDetail') cleanup = renderTaskDetail(slot, ctx);
   else if (route.view === 'budget') cleanup = renderBudget(slot, ctx);
+  else if (route.view === 'team') cleanup = renderTeam(slot, ctx);
+  else if (route.view === 'workspaceSettings') cleanup = renderWorkspaceSettings(slot, ctx);
   else slot.append(notFound());
 }
 

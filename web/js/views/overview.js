@@ -12,6 +12,7 @@ import {
 import { openChecklistPanel } from '../ui/checklistPanel.js';
 import { openVendorPickerPanel } from '../ui/vendorPickerPanel.js';
 import { openEditEventDialog } from '../ui/editEventDialog.js';
+import { openEventMembersDialog } from '../ui/eventMembersDialog.js';
 import {
   fullDate, dateTimeIn, attentionLabel, projectStage, relativeDay, pluralize,
   monthLabel, relativeMonths, upcomingDueLabel,
@@ -153,6 +154,13 @@ export function renderOverview(slot, { params, session, query }) {
   function projectMenu(event) {
     const archived = event.lifecycle === 'archived';
     const menuId = 'project-menu';
+    const membersItem = session.user.role === 'owner' ? h('button', {
+      type: 'button', role: 'menuitem', class: 'project-menu__item',
+      onclick: (e) => {
+        setOpen(false);
+        openEventMembersDialog({ opener: e.currentTarget, eventId: event.id, onSaved: load });
+      },
+    }, 'Участники') : null;
     const item = h('button', {
       type: 'button', role: 'menuitem', class: 'project-menu__item',
       onclick: (e) => {
@@ -162,7 +170,7 @@ export function renderOverview(slot, { params, session, query }) {
         lifecycleAction(archived ? 'restore' : 'archive', b);
       },
     }, archived ? 'Вернуть в активные' : 'Переместить в архив');
-    const panel = h('div', { class: 'project-menu__panel', id: menuId, role: 'menu', hidden: true }, item);
+    const panel = h('div', { class: 'project-menu__panel', id: menuId, role: 'menu', hidden: true }, membersItem, item);
     const toggle = h('button', {
       type: 'button', class: 'icon-btn project-menu__toggle', 'aria-haspopup': 'true',
       'aria-expanded': 'false', 'aria-controls': menuId, 'aria-label': 'Действия с проектом',

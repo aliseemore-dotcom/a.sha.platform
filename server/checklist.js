@@ -121,36 +121,41 @@ export function addChecklistItems(ctx, eventId, body) {
 
   const requested = Array.isArray(body?.items) ? body.items : [];
   const nowIso = new Date(now).toISOString();
-  const created = [];
-  for (const raw of requested) {
-    const item = BY_KEY.get(raw?.key);
-    if (!item) continue;
-    const templateKey = templateKeyOf(item.key);
-    if (store.findTaskByTemplateKey(eventId, templateKey)) continue; // уже добавлена — пропускаем, не дублируем
+  // Несколько задач добавляются как одна операция (docs/specs/08-foundation.md, §1.4) — сбой
+  // посреди списка не должен оставить часть пунктов добавленной, а часть — нет.
+  const created = store.transaction(() => {
+    const out = [];
+    for (const raw of requested) {
+      const item = BY_KEY.get(raw?.key);
+      if (!item) continue;
+      const templateKey = templateKeyOf(item.key);
+      if (store.findTaskByTemplateKey(eventId, templateKey)) continue; // уже добавлена — пропускаем, не дублируем
 
-    let dueDate = null;
-    if (raw.dueDate) {
-      if (!isValidDate(raw.dueDate)) throw new ServiceError(422, 'validation', 'Неверная дата', { dueDate: 'Укажите дату полностью' });
-      dueDate = raw.dueDate;
+      let dueDate = null;
+      if (raw.dueDate) {
+        if (!isValidDate(raw.dueDate)) throw new ServiceError(422, 'validation', 'Неверная дата', { dueDate: 'Укажите дату полностью' });
+        dueDate = raw.dueDate;
+      }
+
+      const task = {
+        id: store.newId('task'),
+        eventId,
+        templateKey,
+        section: item.section,
+        title: item.title,
+        status: 'todo',
+        ...blankTaskFields(),
+        dueDate,
+        dueDateSource: 'template', // ставится всегда, даже без срока — «срок придёт из плана»
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      if (raw.edited) task.dueDateSource = 'manual';
+      store.insertTask(task);
+      out.push(task);
     }
-
-    const task = {
-      id: store.newId('task'),
-      eventId,
-      templateKey,
-      section: item.section,
-      title: item.title,
-      status: 'todo',
-      ...blankTaskFields(),
-      dueDate,
-      dueDateSource: 'template', // ставится всегда, даже без срока — «срок придёт из плана»
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-    if (raw.edited) task.dueDateSource = 'manual';
-    store.insertTask(task);
-    created.push(task);
-  }
+    return out;
+  });
 
   store.setIdempotent(user.id, key, { taskIds: created.map((t) => t.id) });
   return { added: created.length, tasks: created.map((t) => publicTask(ctx, t)) };
@@ -206,19 +211,21 @@ export function rescheduleTasks(ctx, eventId, body) {
   const dueDates = computeChecklistDueDates(event.eventDate, todayDate);
   const nowIso = new Date(now).toISOString();
   const requestedIds = Array.isArray(body?.taskIds) ? body.taskIds : [];
-  const updated = [];
-
-  for (const taskId of requestedIds) {
-    const task = store.getTask(taskId);
-    if (!task || task.eventId !== eventId) continue;
-    if (task.status === 'done' || task.status === 'cancelled') continue;
-    const itemKey = keyFromTemplateKey(task.templateKey);
-    if (!itemKey || !BY_KEY.has(itemKey)) continue;
-    store.updateTask(task.id, {
-      dueDate: dueDates.get(itemKey), dueAt: null, dueDateSource: 'template', updatedAt: nowIso,
-    });
-    updated.push(task.id);
-  }
+  const updated = store.transaction(() => {
+    const out = [];
+    for (const taskId of requestedIds) {
+      const task = store.getTask(taskId);
+      if (!task || task.eventId !== eventId) continue;
+      if (task.status === 'done' || task.status === 'cancelled') continue;
+      const itemKey = keyFromTemplateKey(task.templateKey);
+      if (!itemKey || !BY_KEY.has(itemKey)) continue;
+      store.updateTask(task.id, {
+        dueDate: dueDates.get(itemKey), dueAt: null, dueDateSource: 'template', updatedAt: nowIso,
+      });
+      out.push(task.id);
+    }
+    return out;
+  });
 
   store.setIdempotent(user.id, key, { taskIds: updated });
   return { updated: updated.length, tasks: updated.map((id) => publicTask(ctx, store.getTask(id))) };

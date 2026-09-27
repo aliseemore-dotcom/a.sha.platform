@@ -4,9 +4,10 @@
   "version": "0.1.0",
   "description": "Рабочее пространство организатора свадеб — экран 01 «Мои мероприятия»",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": { "node": ">=22.13.0" },
   "scripts": {
     "start": "node server/index.js",
+    "admin": "node bin/admin.js",
     "test": "node --test test/*.test.js"
   }
 }
