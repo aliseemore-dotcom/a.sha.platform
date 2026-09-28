@@ -1,30 +1,31 @@
-# Шаблон конфигурации Fly.io для пилота (DEMO=0, постоянное хранилище).
-# Перед первым деплоем замените app и primary_region — см. FLY_DEPLOY.md.
+# fly.toml app configuration file generated for a-sha-platform on 2026-09-28T20:22:52Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = "amore-pilot"
-primary_region = "fra"
+app = 'a-sha-platform'
+primary_region = 'ams'
 
 [build]
 
 [env]
-  DEMO = "0"
-  DATABASE_PATH = "/data/app.db"
-  DATABASE_BACKUP_DIR = "/data/backups"
-  NODE_ENV = "production"
-  # После выбора app-имени домен известен заранее: https://<app>.fly.dev
-  PUBLIC_URL = "https://amore-pilot.fly.dev"
+  DATABASE_BACKUP_DIR = '/data/backups'
+  DATABASE_PATH = '/data/app.db'
+  DEMO = '0'
+  NODE_ENV = 'production'
+  PUBLIC_URL = 'https://amore-pilot.fly.dev'
 
 [[mounts]]
-  source = "data"
-  destination = "/data"
+  source = 'data'
+  destination = '/data'
 
 [http_service]
   internal_port = 3000
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
+  size = 'shared-cpu-1x'
+  memory = '256mb'
