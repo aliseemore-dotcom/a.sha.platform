@@ -1,0 +1,30 @@
+# Шаблон конфигурации Fly.io для пилота (DEMO=0, постоянное хранилище).
+# Перед первым деплоем замените app и primary_region — см. FLY_DEPLOY.md.
+
+app = "amore-pilot"
+primary_region = "fra"
+
+[build]
+
+[env]
+  DEMO = "0"
+  DATABASE_PATH = "/data/app.db"
+  DATABASE_BACKUP_DIR = "/data/backups"
+  NODE_ENV = "production"
+  # После выбора app-имени домен известен заранее: https://<app>.fly.dev
+  PUBLIC_URL = "https://amore-pilot.fly.dev"
+
+[[mounts]]
+  source = "data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

@@ -1,0 +1,7 @@
+.git
+data
+*.log
+test
+docs
+README.md
+DESIGN.md

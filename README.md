@@ -51,6 +51,9 @@ DATABASE_PATH=./data/app.db PUBLIC_URL=https://your-domain \
 DEMO=0 DATABASE_PATH=./data/app.db PUBLIC_URL=https://your-domain npm start
 ```
 
+Готовый деплой на бесплатном хостинге с постоянным диском — см.
+[`FLY_DEPLOY.md`](FLY_DEPLOY.md) (Fly.io, `Dockerfile` и `fly.toml` уже в репозитории).
+
 Другие команды консоли (работают с той же базой, сервер запускать не нужно):
 
 ```bash
