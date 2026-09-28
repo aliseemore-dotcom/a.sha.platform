@@ -391,17 +391,15 @@ export function renderOverview(slot, { params, session, query }) {
         }, monthOnly ? 'Уточнить дату' : meta.action));
     }
 
-    // Компактно (ТЗ 09, §2): готовые шаги — одной строкой упоминания, не отдельным рядом с
-    // галочкой на каждый. Полный ряд с кнопкой действия — только у того, что реально нужно сделать.
+    // Компактно (ТЗ 09-2, §2): прогресс и оставшиеся действия — без перечисления уже готового
+    // (готовые шаги и так учтены в «N из total» и заполненности бар-шкалы).
     const pending = steps.filter((s) => !s.done);
-    const doneLabels = steps.filter((s) => s.done).map((s) => STEP[s.key].label);
 
     // Ширина заливки — фиксированный набор классов, а не inline style: CSP страницы (style-src
     // 'self') запрещает style="…", а done/total всегда целые из 5 шагов, поэтому шаг в 20% хватает.
     return h('section', { class: 'setup-block', 'aria-labelledby': 'setup-heading' },
       h('h2', { class: 'setup-block__title', id: 'setup-heading' }, `Настройка свадьбы · ${done} из ${total}`),
       h('div', { class: 'setup-block__bar' }, h('div', { class: `setup-block__fill setup-block__fill--${pct}` })),
-      doneLabels.length ? h('p', { class: 'caption setup-block__done' }, `Готово: ${doneLabels.join(', ')}`) : null,
       h('ul', { class: 'setup-block__list' }, pending.map(stepRow)),
     );
   }

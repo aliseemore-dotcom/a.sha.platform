@@ -54,11 +54,14 @@ export function openVendorDialog({ opener, vendor = null, defaultCategory = null
 
   const categoryField = field({ id: 'vendor-category', label: 'Категория', input: categorySelect });
   const nameField = field({ id: 'vendor-name', label: 'Имя / название', input: nameInput });
-  const phoneField = field({ id: 'vendor-phone', label: 'Телефон', input: phoneInput, hint: 'Необязательно' });
-  const linkField = field({ id: 'vendor-link', label: 'Ссылка / соцсеть', input: linkInput, hint: 'Необязательно' });
-  const priceField = field({ id: 'vendor-price', label: 'Стоимость услуги целиком', input: priceInput, hint: 'Необязательно' });
+  // Подсказка «Необязательно» — одна общая строка над остальными полями, а не под каждым: иначе
+  // она мешает полю цены и полю валюты совпасть по высоте в одной строке (ТЗ 09-2, §4, «как в
+  // анкете бюджета»).
+  const phoneField = field({ id: 'vendor-phone', label: 'Телефон', input: phoneInput });
+  const linkField = field({ id: 'vendor-link', label: 'Ссылка / соцсеть', input: linkInput });
+  const priceField = field({ id: 'vendor-price', label: 'Стоимость услуги целиком', input: priceInput });
   const currencyField = field({ id: 'vendor-currency', label: 'Валюта', input: currencySelect });
-  const noteField = field({ id: 'vendor-note', label: 'Заметка', input: noteInput, hint: 'Необязательно' });
+  const noteField = field({ id: 'vendor-note', label: 'Заметка', input: noteInput });
 
   const banner = h('div', { class: 'banner banner--error', role: 'alert', hidden: true });
   const submit = h('button', { type: 'submit', class: 'btn btn--primary' }, isEdit ? 'Сохранить' : 'Добавить подрядчика');
@@ -72,6 +75,7 @@ export function openVendorDialog({ opener, vendor = null, defaultCategory = null
     h('div', { class: 'dialog__body' },
       banner,
       h('div', { class: 'field-row' }, categoryField.wrap, nameField.wrap),
+      h('p', { class: 'caption vendor-form__hint' }, 'Телефон, ссылка, стоимость и заметка — по желанию'),
       h('div', { class: 'field-row' }, phoneField.wrap, linkField.wrap),
       h('div', { class: 'field-row' }, priceField.wrap, currencyField.wrap),
       noteField.wrap),

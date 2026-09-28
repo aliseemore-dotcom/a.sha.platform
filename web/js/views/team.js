@@ -183,6 +183,18 @@ export function renderTeam(slot) {
       },
     }, u.status === 'disabled' ? 'Включить' : 'Отключить');
 
+    // Видимая часть карточки — только фото, имя, контакты (ТЗ 09-2, §4); роль, право создавать
+    // свадьбы, сброс пароля и отключение остаются рабочими, но убраны в <details>, чтобы карточка
+    // была компактной и близкой к квадрату.
+    const details = h('details', { class: 'team-card__details' },
+      h('summary', { class: 'team-card__summary' }, 'Настройки'),
+      h('div', { class: 'team-card__settings' },
+        h('div', { class: 'field-row' }, roleSelect, canCreateRowLabel(canCreate)),
+        h('p', { class: 'caption team-card__seen' }, u.lastLoginAt ? `Последний вход: ${new Date(u.lastLoginAt).toLocaleString('ru-RU')}` : 'Ещё не входил'),
+        h('div', { class: 'team-card__actions' }, resetBtn, toggleBtn),
+      ),
+    );
+
     return h('li', { class: 'team-card' },
       avatarBlock(u),
       h('div', { class: 'team-card__main' },
@@ -190,9 +202,7 @@ export function renderTeam(slot) {
         h('span', { class: 'team-card__email caption' }, u.email),
         u.status === 'disabled' ? h('span', { class: 'chip chip--blocked' }, 'Отключён') : null,
       ),
-      h('div', { class: 'field-row' }, roleSelect, canCreateRowLabel(canCreate)),
-      h('p', { class: 'caption team-card__seen' }, u.lastLoginAt ? `Последний вход: ${new Date(u.lastLoginAt).toLocaleString('ru-RU')}` : 'Ещё не входил'),
-      h('div', { class: 'team-card__actions' }, resetBtn, toggleBtn),
+      details,
     );
   }
 
