@@ -5,6 +5,7 @@ import {
   attentionLabel, dayNumber, monthYear, fullDate, relativeDay, pluralize, projectStage,
   monthLabel, relativeMonths, upcomingDueLabel,
 } from '../format.js';
+import { coverFor, coverVariant } from './covers.js';
 
 const KIND_TONE = { overdue: 'blocked', blocked: 'blocked', due_today: 'soon' };
 
@@ -109,8 +110,9 @@ export function eventCard(card, { timeZone, now, canArchive, onRestore, fromHref
   const archived = card.lifecycle === 'archived';
   const stage = projectStage(card, timeZone, now);
 
-  const top = h('div', { class: `card__top${card.coverUrl ? ' card__top--photo' : ''}` },
-    card.coverUrl ? h('img', { class: 'card__photo', src: card.coverUrl, alt: '' }) : null,
+  const cover = coverFor(card);
+  const top = h('div', { class: `card__top${cover ? ' card__top--photo' : ''}` },
+    cover ? h('img', { class: `card__photo ${coverVariant(card)}`.trim(), src: cover, alt: '', loading: 'lazy', decoding: 'async' }) : null,
     statusChip(stage.tone, stage.label),
     dateBlock(card, timeZone, now),
   );

@@ -102,6 +102,7 @@ server/
 bin/admin.js         консоль: create-workspace, list-workspaces, reset-link, disable-user, backup-now, restore
 web/
   fonts/              Involve (woff2) + OFL.txt
+  images/covers/      база обложек проектов по умолчанию (web/js/ui/covers.js)
   styles/tokens.css   токены брендбука и @font-face
   styles/app.css      все страницы
   js/views/           events, overview, tasks, budget, vendors, login, invite, team, workspaceSettings

@@ -4,6 +4,7 @@
 // «Ждём ответа» → «В работе» (§0). Использует те же компоненты и функцию срочности, что и
 // «Мои мероприятия», чтобы число и статус совпадали.
 
+import { coverFor, coverVariant } from '../ui/covers.js';
 import { h, clear, announce } from '../dom.js';
 import { api } from '../api.js';
 import {
@@ -15,7 +16,7 @@ import { openEditEventDialog } from '../ui/editEventDialog.js';
 import { openEventMembersDialog } from '../ui/eventMembersDialog.js';
 import {
   fullDate, dateTimeIn, attentionLabel, projectStage, relativeDay, pluralize,
-  monthLabel, relativeMonths, upcomingDueLabel,
+  monthLabel, relativeMonths, upcomingDueLabel, dayNumber, monthYear,
 } from '../format.js';
 import { defaultListLimit } from '../breakpoints.js';
 
@@ -545,7 +546,6 @@ export function renderOverview(slot, { params, session, query }) {
     const stage = projectStage(event, timeZone, now);
     const dateText = event.eventDate ? fullDate(event.eventDate) : 'Дата уточняется';
     const rel = event.eventDate && event.lifecycle === 'active' ? relativeDay(event.eventDate, timeZone, now) : null;
-    const metaText = [dateText, event.locationName].filter(Boolean).join(' · ');
 
     const requiresIds = new Set(attention.map((i) => i.id));
     const tasksById = new Map(tasks.map((t) => [t.id, t]));
@@ -561,35 +561,52 @@ export function renderOverview(slot, { params, session, query }) {
 
     const menu = canArchive ? projectMenu(event) : null;
 
+    // Шапка — «эмоциональный режим» брендбука: обложка, название на фото, справа стеклянная
+    // панель с датой и краткой сводкой. Ниже — «рабочий режим» в две колонки: слева задачи,
+    // справа настройка и подрядчики (дизайн-система v2, DESIGN.md §6).
+    const cover = coverFor(event);
+    const dateGlass = event.eventDate && event.eventDatePrecision !== 'month'
+      ? h('div', { class: 'hero-date', 'aria-hidden': 'true' },
+        h('span', { class: 'hero-date__day' }, dayNumber(event.eventDate)),
+        h('span', { class: 'hero-date__month' }, monthYear(event.eventDate)),
+        rel ? h('span', { class: 'hero-date__rel' }, rel) : null)
+      : null;
+
+    const head = h('section', { class: `overview-hero${cover ? ' overview-hero--photo' : ''}` },
+      cover ? h('img', { class: `overview-hero__photo ${coverVariant(event)}`.trim(), src: cover, alt: '' }) : null,
+      h('div', { class: 'overview-hero__main' },
+        h('div', { class: 'overview-hero__tags' },
+          statusChip(stage.tone, stage.label),
+          h('span', { class: 'overview-hero__tag' }, 'Свадьба'),
+          event.locationName ? h('span', { class: 'overview-hero__tag' }, event.locationName) : null,
+        ),
+        h('h1', { class: 'page-title overview-hero__title' }, event.title),
+        h('p', { class: 'overview-hero__meta' }, dateText, rel && !dateGlass ? ` · ${rel}` : ''),
+      ),
+      h('div', { class: 'overview-hero__panel' }, dateGlass, statRow),
+      menu ? h('div', { class: 'overview-hero__actions' }, menu) : null,
+    );
+
     // main.append — нативный Element.append, а не наш h()-хелпер: null стал бы текстом "null"
     // вместо того, чтобы просто отсутствовать, поэтому пустые слоты отфильтровываются явно.
     main.append(...[
       back(),
       ...banners,
-      h('section', { class: 'overview-head' },
-        event.coverUrl ? h('img', { class: 'overview-cover', src: event.coverUrl, alt: '' }) : null,
-        h('div', { class: 'overview-head__row' },
-          h('div', {},
-            h('p', { class: 'overline' }, 'Свадьба'),
-            h('h1', { class: 'page-title' }, event.title),
-          ),
-          h('div', { class: 'overview-head__actions' }, menu),
-        ),
-        h('div', { class: 'overview-meta' },
-          statusChip(stage.tone, stage.label),
-          h('span', { class: 'overview-meta__text' }, metaText),
-          rel ? h('span', { class: 'overview-meta__rel' }, rel) : null,
-        ),
+      head,
+      h('div', { class: 'overview-grid' },
+        h('div', { class: 'overview-grid__main' }, ...[
+          requiresSection(attention, tasksById, archived, timeZone, now, hasAnyOpenTask),
+          upcomingSection(upcoming, timeZone, now, event),
+          hasAnyOpenTask
+            ? h('div', { class: 'zones' }, workSection(work, timeZone), waitingSection(waiting, timeZone))
+            : h('p', { class: 'muted zones-collapsed' }, 'Появятся, когда задачи возьмут в работу'),
+          h('p', { class: 'overview-alltasks' }, h('a', { class: 'btn btn--secondary', href: allTasksUrl }, 'Открыть все задачи →')),
+        ].filter(Boolean)),
+        h('aside', { class: 'overview-grid__side' }, ...[
+          setupSection(event),
+          vendorsSection(event, archived),
+        ].filter(Boolean)),
       ),
-      setupSection(event),
-      statRow,
-      requiresSection(attention, tasksById, archived, timeZone, now, hasAnyOpenTask),
-      upcomingSection(upcoming, timeZone, now, event),
-      hasAnyOpenTask
-        ? h('div', { class: 'zones' }, workSection(work, timeZone), waitingSection(waiting, timeZone))
-        : h('p', { class: 'muted zones-collapsed' }, 'Появятся, когда задачи возьмут в работу'),
-      h('p', { class: 'overview-alltasks' }, h('a', { class: 'btn btn--secondary', href: allTasksUrl }, 'Открыть все задачи →')),
-      vendorsSection(event, archived),
     ].filter(Boolean));
 
     firstRender = false;

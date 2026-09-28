@@ -414,6 +414,9 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.woff2': 'font/woff2',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
   '.txt': 'text/plain; charset=utf-8',
 };
 
@@ -450,6 +453,7 @@ async function handle(req, res) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method Not Allowed');
 
     if (url.pathname.startsWith('/fonts/') && (await serveFile(res, url.pathname, 'public, max-age=604800'))) return;
+    if (url.pathname.startsWith('/images/') && (await serveFile(res, url.pathname, 'public, max-age=604800'))) return;
     if (/^\/(styles|js)\//.test(url.pathname) && (await serveFile(res, url.pathname))) return;
 
     // Страницы приложения. Без сессии — на вход с безопасным returnTo, кроме публичных страниц.
