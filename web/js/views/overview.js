@@ -210,20 +210,14 @@ export function renderOverview(slot, { params, session, query }) {
    * совпадают. У задачи, которая одновременно in_progress/waiting, — маленький второй бейдж,
    * чтобы её не пришлось повторять строкой в блоке «В работе»/«Ждём ответа» ниже (§0, §2.3).
    */
-  function requiresSection(attention, tasksById, archived, timeZone, now, hasAnyOpenTask, event) {
+  function requiresSection(attention, tasksById, archived, timeZone, now, hasAnyOpenTask) {
     if (!attention.length) {
       const title = 'Требует внимания';
       if (archived) return compactZone('section-requires', 'zone-requires', title, h('p', { class: 'muted' }, 'Проект в архиве'));
       if (!hasAnyOpenTask) {
-        return compactZone('section-requires', 'zone-requires', title, h('div', { class: 'empty-inline' },
-          h('p', { class: 'muted' }, 'Задач пока нет'),
-          h('button', {
-            type: 'button', class: 'btn btn--secondary btn--small',
-            onclick: (e) => openChecklistPanel({
-              opener: e.currentTarget, eventId: event.id,
-              onAdded: () => { announce('Задачи добавлены', 0); load(); },
-            }),
-          }, 'Добавить задачи')));
+        // Кнопка «Добавить задачи» здесь убрана (ТЗ 09-2, §2) — тот же вход уже есть в блоке
+        // настройки (шаг «План задач»), а ручное добавление отдельной задачи — на «Все задачи».
+        return compactZone('section-requires', 'zone-requires', title, h('p', { class: 'muted' }, 'Задач пока нет'));
       }
       return compactZone('section-requires', 'zone-requires', title, h('p', { class: 'muted' }, 'Сейчас нет задач, требующих срочного действия'));
     }
@@ -508,11 +502,12 @@ export function renderOverview(slot, { params, session, query }) {
    * Показатель-переход (§2.2): ведёт к своему блоку; если в нём не осталось собственных строк
    * (все задачи уже показаны в «Требует внимания»), прокручивает и подсвечивает первую из них.
    */
-  function statLink(count, label, sectionId, split) {
+  function statLink(count, label, sectionId, split, tone) {
     const onclick = split && !split.rows.length && split.hidden.length
       ? () => scrollAndHighlight(rowId(split.hidden[0].id))
       : () => scrollAndHighlight(sectionId);
-    return h('button', { type: 'button', class: 'stat', onclick },
+    const toneClass = tone && count ? ` stat--${tone}` : '';
+    return h('button', { type: 'button', class: `stat${toneClass}`, onclick },
       h('span', { class: 'stat__num' }, count), h('span', { class: 'stat__label' }, label));
   }
 
@@ -561,20 +556,12 @@ export function renderOverview(slot, { params, session, query }) {
     const hasAnyOpenTask = tasks.some((t) => ['todo', 'in_progress', 'waiting'].includes(t.status));
 
     const statRow = h('nav', { class: 'stat-row', 'aria-label': 'Сводка по проекту' },
-      statLink(attention.length, 'Требует внимания', 'section-requires', null),
-      statLink(work.all.length, 'В работе', 'section-work', work),
+      statLink(attention.length, 'Требует внимания', 'section-requires', null, 'attention'),
+      statLink(work.all.length, 'В работе', 'section-work', work, 'progress'),
       statLink(waiting.all.length, 'Ждём ответа', 'section-waiting', waiting),
     );
 
     const menu = canArchive ? projectMenu(event) : null;
-    const addTasksBtn = !archived ? h('button', {
-      type: 'button', class: 'btn btn--secondary',
-      onclick: (e) => openChecklistPanel({
-        opener: e.currentTarget,
-        eventId: event.id,
-        onAdded: () => { announce('Задачи добавлены', 0); load(); },
-      }),
-    }, 'Добавить задачи') : null;
 
     // main.append — нативный Element.append, а не наш h()-хелпер: null стал бы текстом "null"
     // вместо того, чтобы просто отсутствовать, поэтому пустые слоты отфильтровываются явно.
@@ -588,7 +575,7 @@ export function renderOverview(slot, { params, session, query }) {
             h('p', { class: 'overline' }, 'Свадьба'),
             h('h1', { class: 'page-title' }, event.title),
           ),
-          h('div', { class: 'overview-head__actions' }, addTasksBtn, menu),
+          h('div', { class: 'overview-head__actions' }, menu),
         ),
         h('div', { class: 'overview-meta' },
           statusChip(stage.tone, stage.label),
@@ -598,7 +585,7 @@ export function renderOverview(slot, { params, session, query }) {
       ),
       setupSection(event),
       statRow,
-      requiresSection(attention, tasksById, archived, timeZone, now, hasAnyOpenTask, event),
+      requiresSection(attention, tasksById, archived, timeZone, now, hasAnyOpenTask),
       upcomingSection(upcoming, timeZone, now, event),
       hasAnyOpenTask
         ? h('div', { class: 'zones' }, workSection(work, timeZone), waitingSection(waiting, timeZone))

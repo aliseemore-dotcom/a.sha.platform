@@ -201,6 +201,34 @@ export function renderBudget(slot, { params, query }) {
     } else if (budget.lines.length) {
       stateNote = 'Итог считает только включённые строки';
     }
+
+    // Бюджет пары из данных проекта — только справочно, рядом со сметой (ТЗ 09-2, §3). Если
+    // ориентир не указан, ничего не подставляем: ни ноль, ни «превышение».
+    const target = project.budgetTarget;
+    let targetRow = null;
+    if (target && target.currency === budget.currency) {
+      const diff = target.amount - budget.total;
+      const overBudget = diff < 0;
+      targetRow = h('div', { class: 'budget-total__target' },
+        h('div', { class: 'budget-total__row' },
+          h('span', { class: 'budget-total__label' }, 'Бюджет пары'),
+          h('span', { class: 'budget-total__target-value' }, formatMoney(target.amount, CURRENCY_LABEL[target.currency] ?? target.currency)),
+        ),
+        h('p', { class: `caption budget-total__diff ${overBudget ? 'budget-total__diff--over' : 'budget-total__diff--ok'}` },
+          overBudget
+            ? `Превышение на ${formatMoney(-diff, CURRENCY_LABEL[budget.currency] ?? budget.currency)}`
+            : `В рамках бюджета — остаток ${formatMoney(diff, CURRENCY_LABEL[budget.currency] ?? budget.currency)}`),
+      );
+    } else if (target) {
+      targetRow = h('div', { class: 'budget-total__target' },
+        h('div', { class: 'budget-total__row' },
+          h('span', { class: 'budget-total__label' }, 'Бюджет пары'),
+          h('span', { class: 'budget-total__target-value' }, formatMoney(target.amount, CURRENCY_LABEL[target.currency] ?? target.currency)),
+        ),
+        h('p', { class: 'caption budget-total__diff' }, 'Ориентир указан в другой валюте — сравнение недоступно'),
+      );
+    }
+
     // totalSlot.append — нативный Element.append: null стал бы текстом "null", поэтому
     // отсутствующий элемент отфильтровывается явно (см. main.append в overview.js).
     totalSlot.append(...[
@@ -213,6 +241,7 @@ export function renderBudget(slot, { params, query }) {
         ? h('p', { class: 'caption budget-total__missing' },
           `Не хватает цены у ${budget.missingCount} ${budget.missingCount === 1 ? 'включённой строки' : 'включённых строк'} — итог неполный`)
         : null,
+      targetRow,
     ].filter(Boolean));
   }
 
@@ -236,7 +265,7 @@ export function renderBudget(slot, { params, query }) {
     renderTotal();
     renderList();
 
-    main.append(back(), head, totalSlot, h('p', {}, addBtn), listSlot);
+    main.append(back(), head, totalSlot, h('p', { class: 'budget-add' }, addBtn), listSlot);
   }
 
   load();

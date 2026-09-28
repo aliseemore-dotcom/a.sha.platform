@@ -15,6 +15,14 @@ const TITLE_MAX = 100;
 const LOCATION_MAX = 150;
 const CONTACTS_MAX = 4;
 
+const composeTitle = (p1, p2) => [p1, p2].filter(Boolean).join(' + ');
+
+/** «Алина + Дима» → [«Алина», «Дима»] — обратная операция к composeTitle (ТЗ 09, §1). */
+function splitNames(value) {
+  const parts = value.trim().split(/\s*\+\s*/).map((s) => s.trim()).filter(Boolean);
+  return [parts[0] || null, parts.slice(1).join(' + ') || null];
+}
+
 function field({ id, label, input, hint }) {
   const hintEl = h('p', { class: 'field__hint', id: `${id}-hint` }, hint ?? '');
   const errorEl = h('p', { class: 'field__error', id: `${id}-error` });
@@ -37,10 +45,11 @@ export function openEditEventDialog({ opener, event, focus = null, onSaved }) {
 
   // ---------- основное ----------
 
-  const p1Input = h('input', { type: 'text', class: 'input', autocomplete: 'off', value: event.partner1Name ?? '' });
-  const p2Input = h('input', { type: 'text', class: 'input', autocomplete: 'off', value: event.partner2Name ?? '' });
-  const p1Field = field({ id: 'edit-event-p1', label: 'Имя', input: p1Input });
-  const p2Field = field({ id: 'edit-event-p2', label: 'Имя партнёра', input: p2Input, hint: 'Необязательно' });
+  const namesInput = h('input', {
+    type: 'text', class: 'input', autocomplete: 'off', placeholder: 'Алина + Дима', maxlength: String(NAME_MAX * 2 + 10),
+    value: composeTitle(event.partner1Name, event.partner2Name),
+  });
+  const namesField = field({ id: 'edit-event-names', label: 'Имена пары', input: namesInput });
 
   const titleInput = h('input', { type: 'text', class: 'input', autocomplete: 'off', value: event.title ?? '' });
   const titleField = field({ id: 'edit-event-title', label: 'Название свадьбы', input: titleInput,
@@ -73,8 +82,10 @@ export function openEditEventDialog({ opener, event, focus = null, onSaved }) {
   const budgetAmount = h('input', { type: 'number', class: 'input', min: '0', step: 'any', value: event.budgetTarget?.amount ?? '' });
   const budgetCurrency = h('select', { class: 'input select' }, CURRENCIES.map((c) => h('option', { value: c }, CURRENCY_LABEL[c] ?? c)));
   budgetCurrency.value = event.budgetTarget?.currency ?? DEFAULT_CURRENCY;
-  const budgetField = field({ id: 'edit-event-budget', label: 'Ориентир бюджета', input: budgetAmount,
-    hint: 'Ориентир пары — не совпадает с рассчитанным итогом сметы' });
+  // Поле суммы и поле валюты — оба через field(), с одинаковой структурой (подпись/поле/подсказка/
+  // ошибка), иначе они не совпадают по высоте в одной строке (ТЗ 09, §1: «не допускай скачков»).
+  const budgetField = field({ id: 'edit-event-budget', label: 'Ориентир бюджета', input: budgetAmount });
+  const budgetCurrencyField = field({ id: 'edit-event-budget-currency', label: 'Валюта', input: budgetCurrency });
 
   // ---------- дополнительные контакты ----------
 
@@ -134,7 +145,7 @@ export function openEditEventDialog({ opener, event, focus = null, onSaved }) {
     h('div', { class: 'dialog__body' },
       banner,
       section('Основное',
-        h('div', { class: 'field-row' }, p1Field.wrap, p2Field.wrap),
+        namesField.wrap,
         titleField.wrap,
         h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'Дата свадьбы'), dateMode),
         dateDayField.wrap, dateMonthField.wrap,
@@ -146,7 +157,8 @@ export function openEditEventDialog({ opener, event, focus = null, onSaved }) {
         h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'Важные пожелания'), wishesInput),
       ),
       section('Бюджетный ориентир',
-        h('div', { class: 'field-row' }, budgetField.wrap, h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'Валюта'), budgetCurrency)),
+        h('div', { class: 'field-row' }, budgetField.wrap, budgetCurrencyField.wrap),
+        h('p', { class: 'field__hint' }, 'Ориентир пары — не совпадает с рассчитанным итогом сметы'),
       ),
       section('Дополнительные контакты',
         contactsList,
@@ -183,9 +195,10 @@ export function openEditEventDialog({ opener, event, focus = null, onSaved }) {
       : dateMode.value === 'month' ? (dateMonth.value ? `${dateMonth.value}-01` : null) : null;
     const contacts = [...contactsList.children].map((row) => row._read()).filter((c) => c.name.trim());
 
+    const [partner1Name, partner2Name] = splitNames(namesInput.value);
     const body = {
-      partner1Name: p1Input.value.trim() || null,
-      partner2Name: p2Input.value.trim() || null,
+      partner1Name,
+      partner2Name,
       title: titleInput.value,
       titleIsCustom: true,
       eventDate,
@@ -213,8 +226,7 @@ export function openEditEventDialog({ opener, event, focus = null, onSaved }) {
     } catch (err) {
       setSaving(false);
       if (err.status === 422 && err.fields) {
-        p1Field.setError(err.fields.partner1Name ?? null);
-        p2Field.setError(err.fields.partner2Name ?? null);
+        namesField.setError(err.fields.partner1Name ?? err.fields.partner2Name ?? null);
         titleField.setError(err.fields.title ?? null);
         dateDayField.setError(err.fields.eventDate ?? null);
         locationField.setError(err.fields.locationName ?? null);
@@ -234,5 +246,5 @@ export function openEditEventDialog({ opener, event, focus = null, onSaved }) {
   dialog.showModal();
   if (focus === 'date') dateMode.focus();
   else if (focus === 'budget') budgetAmount.focus();
-  else p1Input.focus();
+  else namesInput.focus();
 }

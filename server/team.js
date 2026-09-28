@@ -7,6 +7,10 @@ import { revokeOtherSessions } from './auth/sessions.js';
 
 const NAME_MAX = 60;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Фото хранится как data URL прямо в JSON-объекте пользователя (без файлового хранилища —
+// минимальный совместимый вариант, ТЗ 09-2, §4). Ограничение размера — чтобы не раздувать
+// строку в SQLite; полноценный файловый стораж сюда не входит.
+const AVATAR_MAX = 300_000;
 
 function requireOwner(user) {
   if (user.role !== 'owner') throw new ServiceError(403, 'forbidden', 'Только владелец видит команду');
@@ -17,6 +21,7 @@ function publicUser(u) {
     id: u.id, name: u.name, email: u.email, role: u.role,
     canCreateEvents: u.role === 'owner' || (u.permissions ?? []).includes('event:create'),
     status: u.status, lastLoginAt: u.lastLoginAt ?? null,
+    avatarDataUrl: u.avatarDataUrl ?? null,
   };
 }
 
@@ -98,6 +103,16 @@ export function updateTeamMember(ctx, userId, body) {
     const perms = new Set(target.permissions ?? []);
     if (body.canCreateEvents) perms.add('event:create'); else perms.delete('event:create');
     patch.permissions = [...perms];
+  }
+
+  if ('avatarDataUrl' in body) {
+    if (body.avatarDataUrl === null) {
+      patch.avatarDataUrl = null;
+    } else if (typeof body.avatarDataUrl === 'string' && /^data:image\//.test(body.avatarDataUrl) && body.avatarDataUrl.length <= AVATAR_MAX) {
+      patch.avatarDataUrl = body.avatarDataUrl;
+    } else {
+      throw new ServiceError(422, 'validation', 'Проверьте поля формы', { avatarDataUrl: 'Фото слишком большое или в неподдерживаемом формате' });
+    }
   }
 
   const updated = store.updateUser(userId, patch);

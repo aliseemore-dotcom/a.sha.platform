@@ -101,6 +101,35 @@ export function renderTeam(slot) {
     }
   }
 
+  function avatarBlock(u) {
+    const img = u.avatarDataUrl
+      ? h('img', { class: 'team-card__photo', src: u.avatarDataUrl, alt: '' })
+      : h('span', { class: 'team-card__photo team-card__photo--placeholder', 'aria-hidden': 'true' }, (u.name || '?').trim().slice(0, 1).toUpperCase());
+    const fileInput = h('input', {
+      type: 'file', accept: 'image/*', class: 'team-card__photo-input', 'aria-label': `Фото — ${u.name}`,
+      onchange: async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        try {
+          await api.updateTeamMember(u.id, { avatarDataUrl: dataUrl });
+          load();
+        } catch (err) {
+          announce(err.message, 0);
+        } finally {
+          fileInput.value = '';
+        }
+      },
+    });
+    const label = h('label', { class: 'team-card__photo-wrap' }, img, fileInput);
+    return label;
+  }
+
   function memberRow(u) {
     const roleSelect = h('select', { class: 'input select' },
       h('option', { value: 'member' }, 'Участник'), h('option', { value: 'owner' }, 'Владелец'));
@@ -154,15 +183,16 @@ export function renderTeam(slot) {
       },
     }, u.status === 'disabled' ? 'Включить' : 'Отключить');
 
-    return h('li', { class: 'team-row' },
-      h('div', { class: 'team-row__main' },
-        h('span', { class: 'team-row__name' }, u.name),
-        h('span', { class: 'team-row__email caption' }, u.email),
+    return h('li', { class: 'team-card' },
+      avatarBlock(u),
+      h('div', { class: 'team-card__main' },
+        h('span', { class: 'team-card__name' }, u.name),
+        h('span', { class: 'team-card__email caption' }, u.email),
         u.status === 'disabled' ? h('span', { class: 'chip chip--blocked' }, 'Отключён') : null,
       ),
       h('div', { class: 'field-row' }, roleSelect, canCreateRowLabel(canCreate)),
-      h('p', { class: 'caption' }, u.lastLoginAt ? `Последний вход: ${new Date(u.lastLoginAt).toLocaleString('ru-RU')}` : 'Ещё не входил'),
-      h('div', { class: 'team-row__actions' }, resetBtn, toggleBtn),
+      h('p', { class: 'caption team-card__seen' }, u.lastLoginAt ? `Последний вход: ${new Date(u.lastLoginAt).toLocaleString('ru-RU')}` : 'Ещё не входил'),
+      h('div', { class: 'team-card__actions' }, resetBtn, toggleBtn),
     );
   }
 
@@ -188,7 +218,7 @@ export function renderTeam(slot) {
         }, 'Пригласить'),
       ),
       notice,
-      h('ul', { class: 'team-list' }, items.map(memberRow)),
+      h('ul', { class: 'team-grid' }, items.map(memberRow)),
     ].filter(Boolean));
     notice = null;
   }

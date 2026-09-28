@@ -35,6 +35,12 @@ function field({ id, label, input, hint }) {
 
 const composeTitle = (p1, p2) => [p1, p2].filter(Boolean).join(' + ');
 
+/** «Алина + Дима» → [«Алина», «Дима»] — обратная операция к composeTitle (ТЗ 09, §1). */
+function splitNames(value) {
+  const parts = value.trim().split(/\s*\+\s*/).map((s) => s.trim()).filter(Boolean);
+  return [parts[0] || null, parts.slice(1).join(' + ') || null];
+}
+
 /**
  * @param {{ opener: HTMLElement, onCreated: (result: {eventId: string, planStatus: string}) => void }} opts
  */
@@ -46,10 +52,10 @@ export function openCreateDialog({ opener, onCreated }) {
 
   // ---------- основное ----------
 
-  const p1Input = h('input', { type: 'text', class: 'input', autocomplete: 'off', placeholder: 'Анна', maxlength: String(NAME_MAX + 10) });
-  const p2Input = h('input', { type: 'text', class: 'input', autocomplete: 'off', placeholder: 'Максим', maxlength: String(NAME_MAX + 10) });
-  const p1Field = field({ id: 'new-event-p1', label: 'Имя', input: p1Input });
-  const p2Field = field({ id: 'new-event-p2', label: 'Имя партнёра', input: p2Input, hint: 'Необязательно' });
+  const namesInput = h('input', {
+    type: 'text', class: 'input', autocomplete: 'off', placeholder: 'Алина + Дима', maxlength: String(NAME_MAX * 2 + 10),
+  });
+  const namesField = field({ id: 'new-event-names', label: 'Имена пары', input: namesInput });
 
   const titlePreview = h('p', { class: 'title-preview' });
   const titleInput = h('input', { type: 'text', class: 'input', autocomplete: 'off', maxlength: String(TITLE_MAX + 20) });
@@ -107,7 +113,7 @@ export function openCreateDialog({ opener, onCreated }) {
     ),
     h('div', { class: 'dialog__body' },
       banner,
-      h('div', { class: 'field-row' }, p1Field.wrap, p2Field.wrap),
+      namesField.wrap,
       titleRow,
       titleField.wrap,
       h('div', { class: 'field' }, h('span', { class: 'field__label' }, 'Дата свадьбы'), dateModeRow),
@@ -136,7 +142,8 @@ export function openCreateDialog({ opener, onCreated }) {
 
   function updateTitlePreview() {
     if (titleEditing) return;
-    const composed = composeTitle(p1Input.value.trim(), p2Input.value.trim());
+    const [p1, p2] = splitNames(namesInput.value);
+    const composed = composeTitle(p1, p2);
     titlePreview.textContent = composed ? `Свадьба: ${composed}` : 'Свадьба: —';
   }
   updateTitlePreview();
@@ -145,50 +152,51 @@ export function openCreateDialog({ opener, onCreated }) {
     titleEditing = true;
     titleRow.hidden = true;
     titleField.wrap.hidden = false;
-    if (!titleInput.value.trim()) titleInput.value = composeTitle(p1Input.value.trim(), p2Input.value.trim());
+    if (!titleInput.value.trim()) titleInput.value = composeTitle(...splitNames(namesInput.value));
     titleInput.focus();
   });
 
-  const namesError = () => (p1Input.value.trim() || p2Input.value.trim() || titleInput.value.trim() ? null : 'Укажите хотя бы одно имя');
+  const namesError = () => (namesInput.value.trim() || titleInput.value.trim() ? null : 'Укажите хотя бы одно имя');
 
   function validate({ show }) {
     const nErr = namesError();
-    const p1Err = [...p1Input.value.trim()].length > NAME_MAX ? `Не более ${NAME_MAX} символов` : null;
-    const p2Err = [...p2Input.value.trim()].length > NAME_MAX ? `Не более ${NAME_MAX} символов` : null;
+    const [p1, p2] = splitNames(namesInput.value);
+    const namesErr = (p1 && [...p1].length > NAME_MAX) || (p2 && [...p2].length > NAME_MAX)
+      ? `Каждое имя — не более ${NAME_MAX} символов` : null;
     const titleErr = [...titleInput.value.trim()].length > TITLE_MAX ? `Не более ${TITLE_MAX} символов` : null;
     const locErr = [...locationInput.value.trim()].length > LOCATION_MAX ? `Не более ${LOCATION_MAX} символов` : null;
     const dateErr = datePrecision === 'day' && dateDay.value && dateDay.validity.badInput ? 'Укажите дату полностью' : null;
 
-    p1Field.setError(p1Err || (show ? nErr : null));
-    p2Field.setError(p2Err);
+    namesField.setError(namesErr || (show ? nErr : null));
     titleField.setError(titleErr);
     locationField.setError(locErr);
     dateDayField.setError(dateErr);
 
-    submit.disabled = saving || Boolean(nErr || p1Err || p2Err || titleErr || locErr || dateErr);
-    return !(nErr || p1Err || p2Err || titleErr || locErr || dateErr);
+    submit.disabled = saving || Boolean(nErr || namesErr || titleErr || locErr || dateErr);
+    return !(nErr || namesErr || titleErr || locErr || dateErr);
   }
 
   function setSaving(on) {
     saving = on;
     submit.textContent = on ? 'Создаём…' : 'Создать свадьбу';
     submit.setAttribute('aria-busy', on ? 'true' : 'false');
-    for (const el of [p1Input, p2Input, titleInput, dateDay, dateMonth, locationInput, planCheckbox, cancel]) el.disabled = on;
+    for (const el of [namesInput, titleInput, dateDay, dateMonth, locationInput, planCheckbox, cancel]) el.disabled = on;
     for (const r of dateModeRadios) r.querySelector('input').disabled = on;
     if (!on) validate({ show: false });
   }
 
   const isDirty = () => Boolean(
-    p1Input.value.trim() || p2Input.value.trim() || titleInput.value.trim() || dateDay.value || dateMonth.value
+    namesInput.value.trim() || titleInput.value.trim() || dateDay.value || dateMonth.value
     || locationInput.value.trim() || !planCheckbox.checked,
   );
 
   function values() {
     const eventDate = datePrecision === 'day' ? (dateDay.value || null)
       : datePrecision === 'month' ? (dateMonth.value ? `${dateMonth.value}-01` : null) : null;
+    const [partner1Name, partner2Name] = splitNames(namesInput.value);
     return {
-      partner1Name: p1Input.value.trim() || null,
-      partner2Name: p2Input.value.trim() || null,
+      partner1Name,
+      partner2Name,
       title: titleEditing ? titleInput.value.trim() : '',
       titleIsCustom: titleEditing,
       eventDate,
@@ -200,7 +208,7 @@ export function openCreateDialog({ opener, onCreated }) {
 
   function hideConfirm() {
     confirmBox.hidden = true;
-    p1Input.focus();
+    namesInput.focus();
   }
 
   function close(force = false) {
@@ -216,7 +224,7 @@ export function openCreateDialog({ opener, onCreated }) {
     } else close();
   }
 
-  for (const el of [p1Input, p2Input]) el.addEventListener('input', () => { banner.hidden = true; updateTitlePreview(); validate({ show: false }); });
+  namesInput.addEventListener('input', () => { banner.hidden = true; updateTitlePreview(); validate({ show: false }); });
   titleInput.addEventListener('input', () => validate({ show: false }));
   locationInput.addEventListener('input', () => validate({ show: false }));
   dateDay.addEventListener('input', () => validate({ show: false }));
@@ -249,8 +257,7 @@ export function openCreateDialog({ opener, onCreated }) {
     } catch (err) {
       setSaving(false);
       if (err.status === 422 && err.fields) {
-        p1Field.setError(err.fields.partner1Name ?? null);
-        p2Field.setError(err.fields.partner2Name ?? null);
+        namesField.setError(err.fields.partner1Name ?? err.fields.partner2Name ?? null);
         titleField.setError(err.fields.title ?? null);
         if (err.fields.title && !titleEditing) { titleEditing = true; titleRow.hidden = true; titleField.wrap.hidden = false; }
         dateDayField.setError(err.fields.eventDate ?? null);
@@ -268,5 +275,5 @@ export function openCreateDialog({ opener, onCreated }) {
 
   document.body.append(dialog);
   dialog.showModal();
-  p1Input.focus();
+  namesInput.focus();
 }

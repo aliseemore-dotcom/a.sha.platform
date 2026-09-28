@@ -64,13 +64,15 @@ export function openVendorDialog({ opener, vendor = null, defaultCategory = null
   const submit = h('button', { type: 'submit', class: 'btn btn--primary' }, isEdit ? 'Сохранить' : 'Добавить подрядчика');
   const cancel = h('button', { type: 'button', class: 'btn btn--secondary' }, 'Отмена');
 
-  const form = h('form', { class: 'dialog__form', novalidate: true },
+  const form = h('form', { class: 'dialog__form vendor-form', novalidate: true },
     h('div', { class: 'dialog__head' },
       h('h2', { class: 'dialog__title', id: 'vendor-dialog-heading' }, isEdit ? 'Редактировать подрядчика' : 'Добавить подрядчика'),
       h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Закрыть', onclick: () => close() }, '×'),
     ),
     h('div', { class: 'dialog__body' },
-      banner, categoryField.wrap, nameField.wrap, phoneField.wrap, linkField.wrap,
+      banner,
+      h('div', { class: 'field-row' }, categoryField.wrap, nameField.wrap),
+      h('div', { class: 'field-row' }, phoneField.wrap, linkField.wrap),
       h('div', { class: 'field-row' }, priceField.wrap, currencyField.wrap),
       noteField.wrap),
     h('div', { class: 'dialog__foot' }, cancel, submit),
