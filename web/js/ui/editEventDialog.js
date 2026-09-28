@@ -1,9 +1,8 @@
-// Диалог редактирования данных свадьбы. Часть I ТЗ 07 определяет только API (`PATCH
-// /api/events/:id`) и не описывает отдельный экран — полноценная страница «Данные пары» с
-// разделами, режимом просмотра и маршрутом `/events/:id/profile` запланирована в части II (§7).
-// Чтобы часть I не добавляла кнопок без работающего поведения (правило раздела 0 ТЗ), этот диалог
-// уже сейчас даёт отредактировать все поля из раздела 1.1 и провести через `dueDateReview» —
-// он будет заменён страницей в части II, а не дублироваться рядом с ней.
+// Диалог «Данные свадьбы» — редактируемые факты о свадьбе (ТЗ 09, §1.2), разбитые на смысловые
+// блоки: Основное, Пожелания пары, Бюджетный ориентир, Дополнительные контакты. Часть I ТЗ 07
+// определяла только API (`PATCH /api/events/:id`), полноценная страница «Данные пары» с
+// маршрутом `/events/:id/profile` запланирована отдельно — этот диалог её не дублирует и не
+// заменяет собой обзор, анкету, задачи или смету.
 
 import { h, announce } from '../dom.js';
 import { api } from '../api.js';
@@ -25,12 +24,18 @@ function field({ id, label, input, hint }) {
   return { wrap, setError(msg) { errorEl.textContent = msg ?? ''; wrap.classList.toggle('field--error', Boolean(msg)); } };
 }
 
+function section(title, ...children) {
+  return h('div', { class: 'edit-section' }, h('h3', { class: 'overline edit-section__title' }, title), ...children);
+}
+
 /**
- * @param {{ opener: HTMLElement, event: object, focus?: 'date'|'budget', onSaved: () => void }} opts
+ * @param {{ opener: HTMLElement, event: object, focus?: 'names'|'date'|'budget', onSaved: () => void }} opts
  */
 export function openEditEventDialog({ opener, event, focus = null, onSaved }) {
   let saving = false;
   let expectedUpdatedAt = event.updatedAt;
+
+  // ---------- основное ----------
 
   const p1Input = h('input', { type: 'text', class: 'input', autocomplete: 'off', value: event.partner1Name ?? '' });
   const p2Input = h('input', { type: 'text', class: 'input', autocomplete: 'off', value: event.partner2Name ?? '' });
@@ -53,26 +58,37 @@ export function openEditEventDialog({ opener, event, focus = null, onSaved }) {
   const locationInput = h('input', { type: 'text', class: 'input', autocomplete: 'off', value: event.locationName ?? '' });
   const locationField = field({ id: 'edit-event-location', label: 'Город или площадка', input: locationInput, hint: 'Необязательно' });
 
-  const guestsInput = h('input', { type: 'number', class: 'input', min: '1', max: '2000', value: event.guestsCount ?? '' });
-  const guestsField = field({ id: 'edit-event-guests', label: 'Примерно гостей', input: guestsInput, hint: 'Необязательно' });
+  // ---------- пожелания пары ----------
 
-  const budgetAmount = h('input', { type: 'number', class: 'input', min: '0', step: 'any', value: event.budgetTarget?.amount ?? '' });
-  const budgetCurrency = h('select', { class: 'input select' }, CURRENCIES.map((c) => h('option', { value: c }, CURRENCY_LABEL[c] ?? c)));
-  budgetCurrency.value = event.budgetTarget?.currency ?? DEFAULT_CURRENCY;
-  const budgetField = field({ id: 'edit-event-budget', label: 'Ориентир бюджета', input: budgetAmount, hint: 'Необязательно' });
+  const guestsInput = h('input', { type: 'number', class: 'input', min: '1', max: '2000', value: event.guestsCount ?? '' });
+  const guestsField = field({ id: 'edit-event-guests', label: 'Примерное число гостей', input: guestsInput });
 
   const formatInput = h('textarea', { class: 'input', rows: '2' });
   formatInput.value = event.formatNotes ?? '';
   const wishesInput = h('textarea', { class: 'input', rows: '3' });
   wishesInput.value = event.wishesNotes ?? '';
 
+  // ---------- бюджетный ориентир ----------
+
+  const budgetAmount = h('input', { type: 'number', class: 'input', min: '0', step: 'any', value: event.budgetTarget?.amount ?? '' });
+  const budgetCurrency = h('select', { class: 'input select' }, CURRENCIES.map((c) => h('option', { value: c }, CURRENCY_LABEL[c] ?? c)));
+  budgetCurrency.value = event.budgetTarget?.currency ?? DEFAULT_CURRENCY;
+  const budgetField = field({ id: 'edit-event-budget', label: 'Ориентир бюджета', input: budgetAmount,
+    hint: 'Ориентир пары — не совпадает с рассчитанным итогом сметы' });
+
+  // ---------- дополнительные контакты ----------
+
   const contactsList = h('div', { class: 'contacts-list' });
   const addContactBtn = h('button', { type: 'button', class: 'btn btn--secondary btn--small' }, '+ Добавить контакт');
 
   function contactRow(c) {
     const name = h('input', { type: 'text', class: 'input', autocomplete: 'off', placeholder: 'Имя', value: c?.name ?? '' });
-    const relation = h('select', { class: 'input select' }, CONTACT_RELATIONS.map((r) => h('option', { value: r }, RELATION_LABEL[r])));
-    relation.value = c?.relation ?? 'parent';
+    const relation = h('select', { class: 'input select' },
+      h('option', { value: '', disabled: true, hidden: true }, 'Кем приходится'),
+      CONTACT_RELATIONS.map((r) => h('option', { value: r }, RELATION_LABEL[r])));
+    // Роль — только у уже сохранённого контакта; новый контакт не получает предвыбранную роль,
+    // организатор выбирает её осознанно (ТЗ 09, §1.2 — раньше здесь молча стояло «Родитель»).
+    relation.value = c?.relation ?? '';
     const phone = h('input', { type: 'tel', class: 'input', autocomplete: 'off', placeholder: 'Телефон', value: c?.phone ?? '' });
     const email = h('input', { type: 'email', class: 'input', autocomplete: 'off', placeholder: 'Email', value: c?.email ?? '' });
     const remove = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Удалить контакт' }, '×');
@@ -97,6 +113,8 @@ export function openEditEventDialog({ opener, event, focus = null, onSaved }) {
     row.querySelector('input').focus();
   });
 
+  // ---------- каркас ----------
+
   const banner = h('div', { class: 'banner banner--error', role: 'alert', hidden: true });
   const submit = h('button', { type: 'submit', class: 'btn btn--primary' }, 'Сохранить');
   const cancel = h('button', { type: 'button', class: 'btn btn--secondary' }, 'Отмена');
@@ -115,18 +133,25 @@ export function openEditEventDialog({ opener, event, focus = null, onSaved }) {
     ),
     h('div', { class: 'dialog__body' },
       banner,
-      h('div', { class: 'field-row' }, p1Field.wrap, p2Field.wrap),
-      titleField.wrap,
-      h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'Дата свадьбы'), dateMode),
-      dateDayField.wrap, dateMonthField.wrap,
-      locationField.wrap,
-      guestsField.wrap,
-      h('div', { class: 'field-row' }, budgetField.wrap, h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'Валюта'), budgetCurrency)),
-      h('h3', { class: 'overline' }, 'Контакты'),
-      contactsList,
-      addContactBtn,
-      h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'Формат и стиль'), formatInput),
-      h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'Пожелания и важное'), wishesInput),
+      section('Основное',
+        h('div', { class: 'field-row' }, p1Field.wrap, p2Field.wrap),
+        titleField.wrap,
+        h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'Дата свадьбы'), dateMode),
+        dateDayField.wrap, dateMonthField.wrap,
+        locationField.wrap,
+      ),
+      section('Пожелания пары',
+        guestsField.wrap,
+        h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'Формат и стиль'), formatInput),
+        h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'Важные пожелания'), wishesInput),
+      ),
+      section('Бюджетный ориентир',
+        h('div', { class: 'field-row' }, budgetField.wrap, h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'Валюта'), budgetCurrency)),
+      ),
+      section('Дополнительные контакты',
+        contactsList,
+        addContactBtn,
+      ),
     ),
     h('div', { class: 'dialog__foot' }, cancel, submit),
   );

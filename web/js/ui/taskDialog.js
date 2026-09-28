@@ -6,6 +6,7 @@
 import { h } from '../dom.js';
 import { api } from '../api.js';
 import { TITLE_MAX, DESCRIPTION_MAX, BLOCKED_REASON_MAX, WAITING_FROM_MAX } from '../taskLimits.js';
+import { localDate, timeIn } from '../format.js';
 
 function newKey() {
   return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -33,10 +34,10 @@ function field({ id, label, input, hint }) {
 /**
  * @param {{
  *   opener: HTMLElement, eventId: string, teamMembers: {id:string,name:string}[],
- *   task?: object, onSaved: (task: object) => void,
+ *   timeZone: string, task?: object, onSaved: (task: object) => void,
  * }} opts
  */
-export function openTaskDialog({ opener, eventId, teamMembers, task = null, onSaved }) {
+export function openTaskDialog({ opener, eventId, teamMembers, timeZone, task = null, onSaved }) {
   const isEdit = Boolean(task);
   let idempotencyKey = newKey();
   let saving = false;
@@ -68,10 +69,12 @@ export function openTaskDialog({ opener, eventId, teamMembers, task = null, onSa
   const dueDateInput = h('input', { type: 'date', class: 'input', name: 'dueDate' });
   const dueTimeInput = h('input', { type: 'time', class: 'input', name: 'dueTime' });
   if (task?.dueAt) {
-    const d = new Date(task.dueAt);
+    // В поясе пространства, а не в UTC/местном времени браузера — иначе поле формы разойдётся
+    // с тем, что показывают карточка и список (ТЗ 09, §3.1).
+    const ms = Date.parse(task.dueAt);
     hasDue.checked = true;
-    dueDateInput.value = d.toISOString().slice(0, 10);
-    dueTimeInput.value = d.toISOString().slice(11, 16);
+    dueDateInput.value = localDate(ms, timeZone);
+    dueTimeInput.value = timeIn(ms, timeZone);
   } else if (task?.dueDate) {
     hasDue.checked = true;
     dueDateInput.value = task.dueDate;

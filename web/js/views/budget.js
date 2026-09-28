@@ -154,12 +154,18 @@ export function renderBudget(slot, { params, query }) {
       ? h('p', { class: 'budget-line__note' },
         `Исходная цена: ${formatMoney(line.originalPrice, CURRENCY_LABEL[line.originalCurrency])} — валюта отличается от сметы, сумма не пересчитана автоматически`)
       : null;
+    // Кандидат не входит в итог, пока его не подтвердили (docs/specs/06-budget.md) — не молчаливый
+    // невключённый чекбокс, а прямое объяснение рядом с суммой (ТЗ 09, §4).
+    const candidateNote = line.vendorStatus === 'candidate'
+      ? h('p', { class: 'budget-line__note' }, 'Не входит в итог до подтверждения подрядчика')
+      : null;
 
     return h('li', { class: 'budget-line' },
-      h('label', { class: 'checkbox budget-line__include', title: 'Учитывать в итоге' }, includedCheckbox, h('span', { class: 'visually-hidden' }, 'Учитывать в итоге')),
+      h('label', { class: 'checkbox budget-line__include' }, includedCheckbox, h('span', {}, 'Учитывать в итоге')),
       h('div', { class: 'budget-line__main' },
         titleInput,
         line.source === 'vendor' ? h('span', { class: 'caption budget-line__source' }, 'Подрядчик') : null,
+        candidateNote,
         mismatchNote,
       ),
       h('div', { class: 'budget-line__amount-wrap' }, amountInput, h('span', { class: 'caption' }, CURRENCY_LABEL[budget.currency] ?? budget.currency)),
@@ -186,6 +192,15 @@ export function renderBudget(slot, { params, query }) {
 
   function renderTotal() {
     clear(totalSlot);
+    // Разные состояния читаются по-разному (ТЗ 09, §4): пустая смета, только кандидаты (итог 0
+    // не значит «расходов нет») и уже подтверждённые расходы — не одна и та же подпись на всё.
+    const includedCount = budget.lines.filter((l) => l.included).length;
+    let stateNote = null;
+    if (budget.lines.length && !includedCount) {
+      stateNote = 'Пока ни одна строка не включена — цены кандидатов не входят в итог, пока их не подтвердят';
+    } else if (budget.lines.length) {
+      stateNote = 'Итог считает только включённые строки';
+    }
     // totalSlot.append — нативный Element.append: null стал бы текстом "null", поэтому
     // отсутствующий элемент отфильтровывается явно (см. main.append в overview.js).
     totalSlot.append(...[
@@ -193,6 +208,7 @@ export function renderBudget(slot, { params, query }) {
         h('span', { class: 'budget-total__label' }, 'Итого'),
         h('span', { class: 'budget-total__value' }, formatMoney(budget.total, CURRENCY_LABEL[budget.currency] ?? budget.currency)),
       ),
+      stateNote ? h('p', { class: 'caption budget-total__state' }, stateNote) : null,
       budget.missingCount
         ? h('p', { class: 'caption budget-total__missing' },
           `Не хватает цены у ${budget.missingCount} ${budget.missingCount === 1 ? 'включённой строки' : 'включённых строк'} — итог неполный`)

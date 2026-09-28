@@ -46,9 +46,11 @@ export function timeIn(ms, timeZone) {
   return fmt(`time|${timeZone}`, { hour: '2-digit', minute: '2-digit', timeZone }).format(new Date(ms));
 }
 
+// Без timeZoneName: рабочий пояс один на всё пространство, и повторять его в каждой обычной
+// подписи — шум, а не полезная информация (ТЗ 09, §3.1: «не выводи неуместный GMT−7»).
 export function dateTimeIn(ms, timeZone) {
   return fmt(`dt|${timeZone}`, {
-    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone, timeZoneName: 'short',
+    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone,
   }).format(new Date(ms));
 }
 

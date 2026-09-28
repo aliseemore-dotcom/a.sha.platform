@@ -194,11 +194,40 @@ export function renderOverview(slot, { params, session, query }) {
   // ---------- разделы обзора ----------
 
   /**
+   * Компактный вариант зоны — одна строка вместо большой карточки (ТЗ 09, §2): на спокойном
+   * проекте несколько пустых карточек подряд не должны отодвигать полезное содержимое вниз.
+   * Используется, когда в зоне нет содержательных строк; заголовок и текст — в одну строку.
+   */
+  function compactZone(id, headingId, title, content) {
+    return h('section', { class: 'zone zone--compact', id, 'aria-labelledby': headingId, tabindex: '-1' },
+      h('h2', { class: 'zone__title zone__title--inline', id: headingId }, title),
+      content,
+    );
+  }
+
+  /**
    * «Требует внимания»: та же функция срочности, что на «Мои мероприятия» — число и статус
    * совпадают. У задачи, которая одновременно in_progress/waiting, — маленький второй бейдж,
    * чтобы её не пришлось повторять строкой в блоке «В работе»/«Ждём ответа» ниже (§0, §2.3).
    */
   function requiresSection(attention, tasksById, archived, timeZone, now, hasAnyOpenTask, event) {
+    if (!attention.length) {
+      const title = 'Требует внимания';
+      if (archived) return compactZone('section-requires', 'zone-requires', title, h('p', { class: 'muted' }, 'Проект в архиве'));
+      if (!hasAnyOpenTask) {
+        return compactZone('section-requires', 'zone-requires', title, h('div', { class: 'empty-inline' },
+          h('p', { class: 'muted' }, 'Задач пока нет'),
+          h('button', {
+            type: 'button', class: 'btn btn--secondary btn--small',
+            onclick: (e) => openChecklistPanel({
+              opener: e.currentTarget, eventId: event.id,
+              onAdded: () => { announce('Задачи добавлены', 0); load(); },
+            }),
+          }, 'Добавить задачи')));
+      }
+      return compactZone('section-requires', 'zone-requires', title, h('p', { class: 'muted' }, 'Сейчас нет задач, требующих срочного действия'));
+    }
+
     const limit = defaultListLimit();
     const rows = requiresExpanded ? attention : attention.slice(0, limit);
     const toggle = attention.length > limit
@@ -211,35 +240,23 @@ export function renderOverview(slot, { params, session, query }) {
     return h('section', {
       class: 'zone', id: 'section-requires', 'aria-labelledby': 'zone-requires', tabindex: '-1',
     },
-      h('h2', { class: 'zone__title', id: 'zone-requires' }, `Требует внимания${attention.length ? ` · ${attention.length}` : ''}`),
-      attention.length
-        ? [h('ol', { class: 'attention__list attention__list--light' }, rows.map((item) => {
-          const { label, detail } = attentionLabel(item, timeZone, now);
-          const owner = item.ownerName ?? 'Не назначен';
-          const task = tasksById.get(item.id);
-          let secondary = null;
-          if (task?.status === 'in_progress') secondary = statusChip('progress', 'В работе');
-          else if (task?.status === 'waiting') {
-            secondary = statusChip('soon', task.waitingFrom ? `Ждём: ${task.waitingFrom}` : 'Ждём ответа');
-          }
-          const tooltip = [label, item.title, owner, detail].filter(Boolean).join('. ');
-          return taskRow({
-            id: rowId(item.id), href: taskUrl(item.id), tone: KIND_TONE[item.kind], chipLabel: label,
-            title: item.title, meta: owner, tooltip, secondary,
-          });
-        })), toggle]
-        : archived ? h('p', { class: 'muted' }, 'Проект в архиве')
-        : !hasAnyOpenTask
-          ? h('div', { class: 'empty-inline' },
-            h('p', { class: 'muted' }, 'Задач пока нет'),
-            h('button', {
-              type: 'button', class: 'btn btn--secondary btn--small',
-              onclick: (e) => openChecklistPanel({
-                opener: e.currentTarget, eventId: event.id,
-                onAdded: () => { announce('Задачи добавлены', 0); load(); },
-              }),
-            }, 'Добавить задачи'))
-          : h('p', { class: 'muted' }, 'Сейчас нет задач, требующих срочного действия'),
+      h('h2', { class: 'zone__title', id: 'zone-requires' }, `Требует внимания · ${attention.length}`),
+      h('ol', { class: 'attention__list attention__list--light' }, rows.map((item) => {
+        const { label, detail } = attentionLabel(item, timeZone, now);
+        const owner = item.ownerName ?? 'Не назначен';
+        const task = tasksById.get(item.id);
+        let secondary = null;
+        if (task?.status === 'in_progress') secondary = statusChip('progress', 'В работе');
+        else if (task?.status === 'waiting') {
+          secondary = statusChip('soon', task.waitingFrom ? `Ждём: ${task.waitingFrom}` : 'Ждём ответа');
+        }
+        const tooltip = [label, item.title, owner, detail].filter(Boolean).join('. ');
+        return taskRow({
+          id: rowId(item.id), href: taskUrl(item.id), tone: KIND_TONE[item.kind], chipLabel: label,
+          title: item.title, meta: owner, tooltip, secondary,
+        });
+      })),
+      toggle,
     );
   }
 
@@ -254,25 +271,20 @@ export function renderOverview(slot, { params, session, query }) {
    * Следующее действие не придумывается, если его нет в данных.
    */
   function workSection({ all, rows, hidden }, timeZone) {
-    let body;
-    if (!all.length) body = h('p', { class: 'muted' }, 'Пока нет задач в работе');
-    else if (!rows.length) body = shownAboveNote(hidden);
-    else {
-      body = [
-        h('ol', { class: 'attention__list attention__list--light' }, rows.sort(dueSort).map((t) => {
-          const due = shortDue(t, timeZone);
-          const meta = [t.assigneeName ?? 'Не назначен', due].filter(Boolean).join(' · ');
-          return taskRow({
-            href: taskUrl(t.id), tone: 'progress', chipLabel: 'В работе', title: t.title, meta,
-            tooltip: [t.title, meta].join('. '),
-          });
-        })),
-        shownAboveNote(hidden),
-      ];
-    }
+    const title = 'В работе';
+    if (!all.length) return compactZone('section-work', 'zone-work', title, h('p', { class: 'muted' }, 'Пока нет задач в работе'));
+    if (!rows.length) return compactZone('section-work', 'zone-work', `${title} · ${all.length}`, shownAboveNote(hidden));
     return h('section', { class: 'zone', id: 'section-work', 'aria-labelledby': 'zone-work', tabindex: '-1' },
-      h('h2', { class: 'zone__title', id: 'zone-work' }, `В работе${all.length ? ` · ${all.length}` : ''}`),
-      body,
+      h('h2', { class: 'zone__title', id: 'zone-work' }, `${title} · ${all.length}`),
+      h('ol', { class: 'attention__list attention__list--light' }, rows.sort(dueSort).map((t) => {
+        const due = shortDue(t, timeZone);
+        const meta = [t.assigneeName ?? 'Не назначен', due].filter(Boolean).join(' · ');
+        return taskRow({
+          href: taskUrl(t.id), tone: 'progress', chipLabel: 'В работе', title: t.title, meta,
+          tooltip: [t.title, meta].join('. '),
+        });
+      })),
+      shownAboveNote(hidden),
     );
   }
 
@@ -282,28 +294,23 @@ export function renderOverview(slot, { params, session, query }) {
    * и не путается со сроком выполнения самой задачи. «Нужно напомнить» не выводится самостоятельно.
    */
   function waitingSection({ all, rows, hidden }, timeZone) {
-    let body;
-    if (!all.length) body = h('p', { class: 'muted' }, 'Сейчас никого не ждём');
-    else if (!rows.length) body = shownAboveNote(hidden);
-    else {
-      body = [
-        h('ol', { class: 'attention__list attention__list--light' }, rows.map((t) => {
-          const chipLabel = t.waitingFrom ? `Ждём: ${t.waitingFrom}` : 'Ждём ответа';
-          const meta = [
-            `Ответственный: ${t.assigneeName ?? 'Не назначен'}`,
-            t.followUpAt ? `Контроль: ${fullDate(t.followUpAt.slice(0, 10))}` : null,
-          ].filter(Boolean).join(' · ');
-          return taskRow({
-            href: taskUrl(t.id), tone: 'soon', chipLabel, title: t.title, meta,
-            tooltip: [chipLabel, t.title, meta].join('. '),
-          });
-        })),
-        shownAboveNote(hidden),
-      ];
-    }
+    const title = 'Ждём ответа';
+    if (!all.length) return compactZone('section-waiting', 'zone-waiting', title, h('p', { class: 'muted' }, 'Сейчас никого не ждём'));
+    if (!rows.length) return compactZone('section-waiting', 'zone-waiting', `${title} · ${all.length}`, shownAboveNote(hidden));
     return h('section', { class: 'zone', id: 'section-waiting', 'aria-labelledby': 'zone-waiting', tabindex: '-1' },
-      h('h2', { class: 'zone__title', id: 'zone-waiting' }, `Ждём ответа${all.length ? ` · ${all.length}` : ''}`),
-      body,
+      h('h2', { class: 'zone__title', id: 'zone-waiting' }, `${title} · ${all.length}`),
+      h('ol', { class: 'attention__list attention__list--light' }, rows.map((t) => {
+        const chipLabel = t.waitingFrom ? `Ждём: ${t.waitingFrom}` : 'Ждём ответа';
+        const meta = [
+          `Ответственный: ${t.assigneeName ?? 'Не назначен'}`,
+          t.followUpAt ? `Контроль: ${fullDate(t.followUpAt.slice(0, 10))}` : null,
+        ].filter(Boolean).join(' · ');
+        return taskRow({
+          href: taskUrl(t.id), tone: 'soon', chipLabel, title: t.title, meta,
+          tooltip: [chipLabel, t.title, meta].join('. '),
+        });
+      })),
+      shownAboveNote(hidden),
     );
   }
 
@@ -312,6 +319,24 @@ export function renderOverview(slot, { params, session, query }) {
    * продедуплицированные на сервере — то же число, что и на карточке списка.
    */
   function upcomingSection(upcoming, timeZone, now, event) {
+    const title = 'Дальше · 14 дней';
+    if (!upcoming.items.length) {
+      if (upcoming.nearestBeyond) {
+        const dueText = fullDate(upcoming.nearestBeyond.dueAt ? upcoming.nearestBeyond.dueAt.slice(0, 10) : upcoming.nearestBeyond.dueDate);
+        return compactZone('section-upcoming', 'zone-upcoming', title, h('p', { class: 'muted' },
+          h('a', { href: taskUrl(upcoming.nearestBeyond.id), class: 'link' }, `Ближайший срок — ${upcoming.nearestBeyond.title}, ${dueText}`)));
+      }
+      if (!upcoming.hasAnyDue && event.eventDatePrecision !== 'day') {
+        return compactZone('section-upcoming', 'zone-upcoming', title, h('div', { class: 'empty-inline' },
+          h('p', { class: 'muted' }, 'Задач со сроком нет'),
+          h('button', {
+            type: 'button', class: 'btn btn--secondary btn--small',
+            onclick: (e) => openEditEventDialog({ opener: e.currentTarget, event, focus: 'date', onSaved: load }),
+          }, 'Указать дату')));
+      }
+      return compactZone('section-upcoming', 'zone-upcoming', title, h('p', { class: 'muted' }, 'Задач со сроком нет'));
+    }
+
     const limit = defaultListLimit();
     const rows = upcomingExpanded ? upcoming.items : upcoming.items.slice(0, limit);
     const toggle = upcoming.items.length > limit
@@ -321,34 +346,17 @@ export function renderOverview(slot, { params, session, query }) {
         onclick: () => { upcomingExpanded = !upcomingExpanded; render(lastData); },
       }, upcomingExpanded ? 'Свернуть' : `Показать все ${upcoming.items.length}`)
       : null;
-
-    let body;
-    if (upcoming.items.length) {
-      body = [
-        h('ol', { class: 'attention__list attention__list--light' }, rows.map((item) => {
-          const due = upcomingDueLabel(item.dueAt ? item.dueAt.slice(0, 10) : item.dueDate, timeZone, now);
-          const meta = [item.ownerName ?? 'Не назначен'].filter(Boolean).join(' · ');
-          return taskRow({
-            href: taskUrl(item.id), tone: 'planned', chipLabel: due, title: item.title, meta,
-            tooltip: [due, item.title, meta].join('. '),
-          });
-        })),
-        toggle,
-      ];
-    } else if (upcoming.nearestBeyond) {
-      const dueText = fullDate(upcoming.nearestBeyond.dueAt ? upcoming.nearestBeyond.dueAt.slice(0, 10) : upcoming.nearestBeyond.dueDate);
-      body = h('p', { class: 'muted' },
-        h('a', { href: taskUrl(upcoming.nearestBeyond.id), class: 'link' }, `Ближайший срок — ${upcoming.nearestBeyond.title}, ${dueText}`));
-    } else if (!upcoming.hasAnyDue) {
-      body = h('p', { class: 'muted' },
-        'Задач со сроком нет', event.eventDatePrecision !== 'day' ? ' — укажите дату свадьбы, и задачи плана получат сроки.' : '.');
-    } else {
-      body = h('p', { class: 'muted' }, 'Задач со сроком нет');
-    }
-
     return h('section', { class: 'zone', id: 'section-upcoming', 'aria-labelledby': 'zone-upcoming', tabindex: '-1' },
-      h('h2', { class: 'zone__title', id: 'zone-upcoming' }, `Дальше · 14 дней${upcoming.items.length ? ` · ${upcoming.items.length}` : ''}`),
-      body,
+      h('h2', { class: 'zone__title', id: 'zone-upcoming' }, `${title} · ${upcoming.items.length}`),
+      h('ol', { class: 'attention__list attention__list--light' }, rows.map((item) => {
+        const due = upcomingDueLabel(item.dueAt ? item.dueAt.slice(0, 10) : item.dueDate, timeZone, now);
+        const meta = [item.ownerName ?? 'Не назначен'].filter(Boolean).join(' · ');
+        return taskRow({
+          href: taskUrl(item.id), tone: 'planned', chipLabel: due, title: item.title, meta,
+          tooltip: [due, item.title, meta].join('. '),
+        });
+      })),
+      toggle,
     );
   }
 
@@ -360,7 +368,7 @@ export function renderOverview(slot, { params, session, query }) {
     const pct = Math.round((done / total) * 100);
     const STEP = {
       date: { label: 'Дата свадьбы', action: 'Указать дату', focus: 'date' },
-      couple: { label: 'Данные пары', action: 'Заполнить', focus: null },
+      couple: { label: 'Данные пары', action: 'Указать имена', focus: 'names' },
       plan: { label: 'План задач', action: 'Добавить задачи' },
       vendors: { label: 'Подрядчики', action: 'Выбрать' },
       budget: { label: 'Бюджет', action: 'Указать ориентир', focus: 'budget' },
@@ -378,10 +386,6 @@ export function renderOverview(slot, { params, session, query }) {
 
     function stepRow(step) {
       const meta = STEP[step.key];
-      if (step.done) {
-        return h('li', { class: 'setup-step setup-step--done' },
-          h('span', { class: 'shape shape--done', 'aria-hidden': 'true' }), h('span', {}, meta.label));
-      }
       const monthOnly = step.key === 'date' && event.eventDatePrecision === 'month';
       const text = monthOnly ? 'Известен только месяц — уточните день' : meta.label;
       return h('li', { class: 'setup-step' },
@@ -393,12 +397,18 @@ export function renderOverview(slot, { params, session, query }) {
         }, monthOnly ? 'Уточнить дату' : meta.action));
     }
 
+    // Компактно (ТЗ 09, §2): готовые шаги — одной строкой упоминания, не отдельным рядом с
+    // галочкой на каждый. Полный ряд с кнопкой действия — только у того, что реально нужно сделать.
+    const pending = steps.filter((s) => !s.done);
+    const doneLabels = steps.filter((s) => s.done).map((s) => STEP[s.key].label);
+
     // Ширина заливки — фиксированный набор классов, а не inline style: CSP страницы (style-src
     // 'self') запрещает style="…", а done/total всегда целые из 5 шагов, поэтому шаг в 20% хватает.
     return h('section', { class: 'setup-block', 'aria-labelledby': 'setup-heading' },
       h('h2', { class: 'setup-block__title', id: 'setup-heading' }, `Настройка свадьбы · ${done} из ${total}`),
       h('div', { class: 'setup-block__bar' }, h('div', { class: `setup-block__fill setup-block__fill--${pct}` })),
-      h('ul', { class: 'setup-block__list' }, steps.map(stepRow)),
+      doneLabels.length ? h('p', { class: 'caption setup-block__done' }, `Готово: ${doneLabels.join(', ')}`) : null,
+      h('ul', { class: 'setup-block__list' }, pending.map(stepRow)),
     );
   }
 

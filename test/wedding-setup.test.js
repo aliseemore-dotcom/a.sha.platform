@@ -296,7 +296,7 @@ test('setup: 5 шагов, done растёт по мере заполнения'
   assert.equal(s.steps.find((x) => x.key === 'date').done, false);
 });
 
-test('setup: подрядчики и бюджет засчитываются из своих данных', () => {
+test('setup: подрядчики засчитываются из своих данных; бюджет — только по явному ориентиру', () => {
   const { event, ctx, owner, store } = setup();
   const e = event();
   let s = computeSetupSteps(store, e, []);
@@ -308,9 +308,23 @@ test('setup: подрядчики и бюджет засчитываются и�
   s = computeSetupSteps(store, e, []);
   assert.equal(s.steps.find((x) => x.key === 'vendors').done, true);
 
+  // Добавление подрядчика-кандидата создаёт строку сметы автоматически (docs/specs/06-budget.md),
+  // но это не значит, что организатор осознанно задал ориентир бюджета — шаг остаётся незавершён
+  // (ТЗ 09, §2: «появление строки расходов при итоге 0 не должно выглядеть как завершённый бюджет»).
   addManualLine({ store, user: owner, now: NOON }, e.id, { category: 'Площадка', title: 'Аренда', amount: 1000 });
   s = computeSetupSteps(store, e, []);
+  assert.equal(s.steps.find((x) => x.key === 'budget').done, false);
+
+  const withTarget = { ...e, budgetTarget: { amount: 500000, currency: 'RUB' } };
+  s = computeSetupSteps(store, withTarget, []);
   assert.equal(s.steps.find((x) => x.key === 'budget').done, true);
+});
+
+test('setup: «Данные пары» готовы по именам, без обязательного дополнительного контакта', () => {
+  const { event, store } = setup();
+  const e = event({ partner1Name: 'Анна', partner2Name: 'Максим', contacts: [] });
+  const s = computeSetupSteps(store, e, []);
+  assert.equal(s.steps.find((x) => x.key === 'couple').done, true);
 });
 
 test('setup виден в getEvent и в карточках списка из одного снимка', () => {

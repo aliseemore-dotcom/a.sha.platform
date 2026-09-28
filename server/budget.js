@@ -25,11 +25,16 @@ function getOrCreateBudget(store, eventId, nowIso) {
   return b;
 }
 
-function publicLine(l) {
+function publicLine(store, l) {
+  // Статус подрядчика — чтобы клиент честно объяснил, почему строка-кандидат не в итоге, а не
+  // просто показал невключённый чекбокс без причины (ТЗ 09, §4).
+  const vendorLinkId = l.sourceEventVendorId ?? null;
+  const vendorStatus = vendorLinkId ? store.getEventVendor(vendorLinkId)?.status ?? null : null;
   return {
     id: l.id,
     source: l.source,
-    vendorLinkId: l.sourceEventVendorId ?? null,
+    vendorLinkId,
+    vendorStatus,
     category: l.category,
     title: l.title,
     amount: l.amount ?? null,
@@ -50,7 +55,7 @@ export function getBudget(ctx, eventId) {
   if (!canSeeEvent(ctx.user, event)) throw notFound();
   const nowIso = new Date(ctx.now).toISOString();
   const budget = getOrCreateBudget(ctx.store, eventId, nowIso);
-  const lines = ctx.store.budgetLinesForEvent(eventId).map(publicLine);
+  const lines = ctx.store.budgetLinesForEvent(eventId).map((l) => publicLine(ctx.store, l));
   const included = lines.filter((l) => l.included);
   const total = included.reduce((s, l) => s + (l.amount ?? 0), 0);
   const missingCount = included.filter((l) => l.amount == null).length;
@@ -122,7 +127,7 @@ export function addManualLine(ctx, eventId, body) {
     updatedAt: nowIso,
   };
   ctx.store.insertBudgetLine(line);
-  return publicLine(line);
+  return publicLine(ctx.store, line);
 }
 
 function getOwnedLine(store, user, eventId, lineId) {
@@ -141,7 +146,7 @@ export function updateBudgetLine(ctx, eventId, lineId, body) {
   if ('title' in patch || 'amount' in patch) patch.manuallyEdited = true;
   patch.updatedAt = new Date(ctx.now).toISOString();
   ctx.store.updateBudgetLine(line.id, patch);
-  return publicLine(ctx.store.getBudgetLine(line.id));
+  return publicLine(ctx.store, ctx.store.getBudgetLine(line.id));
 }
 
 export function removeBudgetLine(ctx, eventId, lineId) {
@@ -205,5 +210,5 @@ export function resolveVendorLine(store, eventId, eventVendorId, action, nowIso)
 
 export function findVendorLine(ctx, eventId, eventVendorId) {
   const line = ctx.store.findBudgetLineByEventVendor(eventId, eventVendorId);
-  return line ? publicLine(line) : null;
+  return line ? publicLine(ctx.store, line) : null;
 }

@@ -14,21 +14,46 @@ const notFound = () => new ServiceError(404, 'not_found', 'Проект не н�
 
 // afterStartDays — от сегодняшнего дня («Начало»); beforeEventDays — от даты свадьбы (или от
 // первого числа месяца, если известен только месяц). Значения временные (см. ТЗ 07, раздел 3.1).
+// Подписи-подсказки не хранятся статично: при коротком сроке подготовки реальный срок сжимается
+// (см. computeChecklistDueDates), и статичная «за 10 мес.» разошлась бы с фактической датой рядом
+// с ней — подпись всегда считается из уже назначенного срока (ТЗ 09, §3.2, describeSchedule).
 export const TASK_CHECKLIST = [
-  { key: 'start-brief', section: 'Начало', title: 'Заполнить бриф пары', afterStartDays: 7, label: 'в первую неделю' },
-  { key: 'start-format', section: 'Начало', title: 'Согласовать формат свадьбы', afterStartDays: 14, label: 'в первые 2 недели' },
-  { key: 'start-budget', section: 'Начало', title: 'Определить ориентир бюджета', afterStartDays: 14, label: 'в первые 2 недели' },
-  { key: 'venue-shortlist', section: 'Площадка', title: 'Подобрать площадки', beforeEventDays: 300, label: 'за 10 мес. до свадьбы' },
-  { key: 'venue-confirm', section: 'Площадка', title: 'Подтвердить площадку', beforeEventDays: 270, label: 'за 9 мес.' },
-  { key: 'vendors-define', section: 'Подрядчики', title: 'Определить нужных подрядчиков', beforeEventDays: 270, label: 'за 9 мес.' },
-  { key: 'vendors-confirm', section: 'Подрядчики', title: 'Согласовать подрядчиков', beforeEventDays: 180, label: 'за 6 мес.' },
-  { key: 'guests-list', section: 'Гости', title: 'Составить список гостей', beforeEventDays: 180, label: 'за 6 мес.' },
-  { key: 'guests-invites', section: 'Гости', title: 'Отправить приглашения', beforeEventDays: 90, label: 'за 3 мес.' },
-  { key: 'day-menu', section: 'Подготовка дня', title: 'Согласовать меню', beforeEventDays: 60, label: 'за 2 мес.' },
-  { key: 'day-timing', section: 'Подготовка дня', title: 'Подготовить тайминг', beforeEventDays: 30, label: 'за месяц' },
-  { key: 'guests-seating', section: 'Гости', title: 'Подготовить рассадку', beforeEventDays: 21, label: 'за 3 недели' },
-  { key: 'day-final', section: 'Подготовка дня', title: 'Подтвердить финальный тайминг и договорённости', beforeEventDays: 7, label: 'за неделю' },
+  { key: 'start-brief', section: 'Начало', title: 'Заполнить бриф пары', afterStartDays: 7 },
+  { key: 'start-format', section: 'Начало', title: 'Согласовать формат свадьбы', afterStartDays: 14 },
+  { key: 'start-budget', section: 'Начало', title: 'Определить ориентир бюджета', afterStartDays: 14 },
+  { key: 'venue-shortlist', section: 'Площадка', title: 'Подобрать площадки', beforeEventDays: 300 },
+  { key: 'venue-confirm', section: 'Площадка', title: 'Подтвердить площадку', beforeEventDays: 270 },
+  { key: 'vendors-define', section: 'Подрядчики', title: 'Определить нужных подрядчиков', beforeEventDays: 270 },
+  { key: 'vendors-confirm', section: 'Подрядчики', title: 'Согласовать подрядчиков', beforeEventDays: 180 },
+  { key: 'guests-list', section: 'Гости', title: 'Составить список гостей', beforeEventDays: 180 },
+  { key: 'guests-invites', section: 'Гости', title: 'Отправить приглашения', beforeEventDays: 90 },
+  { key: 'day-menu', section: 'Подготовка дня', title: 'Согласовать меню', beforeEventDays: 60 },
+  { key: 'day-timing', section: 'Подготовка дня', title: 'Подготовить тайминг', beforeEventDays: 30 },
+  { key: 'guests-seating', section: 'Гости', title: 'Подготовить рассадку', beforeEventDays: 21 },
+  { key: 'day-final', section: 'Подготовка дня', title: 'Подтвердить финальный тайминг и договорённости', beforeEventDays: 7 },
 ];
+
+/**
+ * Подпись рядом с полем даты в панели «Добавить задачи» — считается из уже назначенного срока,
+ * а не из исходного правила, поэтому не может разойтись с датой, которая показана тут же
+ * (ТЗ 09, §3.2). Без даты подписи нет — поле даты и так не показывается.
+ */
+function describeSchedule(item, dueDate, todayDate, eventDate) {
+  if (!dueDate) return null;
+  if (item.afterStartDays != null) {
+    const days = daysBetween(todayDate, dueDate);
+    if (days <= 0) return 'сегодня';
+    if (days === 1) return 'завтра';
+    if (days < 14) return `через ${days} дн.`;
+    return `через ${Math.round(days / 7)} нед.`;
+  }
+  if (!eventDate) return null;
+  const days = daysBetween(dueDate, eventDate);
+  if (days <= 0) return 'к дате свадьбы';
+  if (days < 14) return `за ${days} дн. до свадьбы`;
+  if (days < 60) return `за ${Math.round(days / 7)} нед. до свадьбы`;
+  return `за ${Math.round(days / 30)} мес. до свадьбы`;
+}
 
 const BY_KEY = new Map(TASK_CHECKLIST.map((item) => [item.key, item]));
 const MAX_BEFORE = Math.max(...TASK_CHECKLIST.filter((i) => i.beforeEventDays != null).map((i) => i.beforeEventDays));
@@ -89,13 +114,14 @@ export function getChecklist(ctx, eventId) {
 
   const items = TASK_CHECKLIST.map((item) => {
     const existing = store.findTaskByTemplateKey(eventId, templateKeyOf(item.key));
+    const suggestedDueDate = existing ? null : dueDates.get(item.key);
     return {
       key: item.key,
       section: item.section,
       title: item.title,
-      ruleLabel: item.label,
+      ruleLabel: describeSchedule(item, suggestedDueDate, todayDate, event.eventDate),
       added: Boolean(existing),
-      suggestedDueDate: existing ? null : dueDates.get(item.key),
+      suggestedDueDate,
     };
   });
   return { items, eventDate: event.eventDate, canEdit: event.lifecycle === 'active' };

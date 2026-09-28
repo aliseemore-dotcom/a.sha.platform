@@ -600,6 +600,11 @@ a { color: inherit; }
   .dialog__foot .btn { flex: 1; }
 }
 
+/* «Данные свадьбы» — смысловые блоки внутри одного диалога (ТЗ 09, §1.2), не отдельные экраны. */
+.edit-section { display: grid; gap: var(--space-2); }
+.edit-section + .edit-section { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line-soft); }
+.edit-section__title { margin: 0; }
+
 .field { display: grid; gap: 6px; }
 .field__label { font-weight: 600; font-size: 14px; }
 .field__hint { font-size: var(--fs-caption); color: var(--ink-secondary); min-height: 0; }
@@ -739,6 +744,7 @@ a { color: inherit; }
 .setup-block__fill--60 { width: 60%; }
 .setup-block__fill--80 { width: 80%; }
 .setup-block__fill--100 { width: 100%; }
+.setup-block__done { margin-bottom: var(--space-1); }
 .setup-block__list { display: grid; gap: var(--space-1); }
 .setup-step {
   display: flex; align-items: center; gap: var(--space-1);
@@ -790,6 +796,17 @@ a { color: inherit; }
 }
 .zone:focus { outline: 2px solid var(--ink-primary); outline-offset: 2px; }
 .zone__title { font-size: var(--fs-heading); font-weight: 700; margin-bottom: var(--space-2); }
+
+/* Пустая зона — одна строка вместо большой карточки (ТЗ 09, §2): заголовок и сообщение рядом,
+   без лишнего веса, когда показывать по сути нечего. */
+.zone--compact {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.zone__title--inline { font-size: var(--fs-body); font-weight: 600; margin-bottom: 0; white-space: nowrap; }
+.zone--compact .empty-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
+.zone--compact p { margin: 0; }
 .zone__head {
   display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-2);
 }
@@ -844,13 +861,18 @@ a { color: inherit; }
 
 /* ---------- задачи проекта: список ---------- */
 
+/* Поиск и статус — видны всегда; остальные условия — под «Фильтры» (ТЗ 09, §3.3): список задач
+   не должен начинаться с двух рядов контролов, которые доминируют над содержимым. */
 .task-filters {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2);
+  display: grid; gap: var(--space-1);
   margin: var(--space-2) 0;
   padding: var(--space-2);
   background: var(--surface-muted);
   border-radius: var(--radius-button);
 }
+.task-filters__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
+.task-filters__more { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); padding-top: var(--space-1); border-top: 1px solid var(--line-strong); }
+.task-filters__more[hidden] { display: none; }
 .field--inline { display: flex; align-items: center; gap: var(--space-1); }
 .field--inline .field__label { font-size: var(--fs-caption); color: var(--ink-secondary); white-space: nowrap; }
 .field--inline[hidden] { display: none; }
@@ -863,7 +885,8 @@ a { color: inherit; }
 .checkbox--filter input { width: 18px; height: 18px; accent-color: var(--ink-primary); }
 .task-matched { margin-bottom: var(--space-2); }
 @media (max-width: 767px) {
-  .task-filters { flex-direction: column; align-items: stretch; }
+  .task-filters__row { flex-direction: column; align-items: stretch; }
+  .task-filters__more { flex-direction: column; align-items: stretch; }
   .task-filters .search { width: auto; }
   .field--inline { justify-content: space-between; }
   .field--inline .select { flex: 1; max-width: none; }
@@ -1020,7 +1043,8 @@ textarea.input { min-height: 88px; padding: var(--space-1) var(--space-2); resiz
   padding: var(--space-1) var(--space-2);
 }
 .budget-line + .budget-line { border-top: 1px solid var(--line-soft); }
-.budget-line__include { min-height: 0; margin: 0; }
+/* Видимая подпись «Учитывать в итоге» (ТЗ 09, §4) — не только доступное имя для скринридера. */
+.budget-line__include { margin: 0; font-size: var(--fs-caption); color: var(--ink-secondary); flex: none; }
 .budget-line__include input { width: 20px; height: 20px; accent-color: var(--ink-primary); }
 .budget-line__main { flex: 1 1 220px; min-width: 0; display: grid; gap: 2px; }
 .budget-line__title { border: 1px solid transparent; background: transparent; padding: 4px 6px; font-weight: 600; }

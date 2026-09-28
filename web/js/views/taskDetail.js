@@ -91,7 +91,7 @@ export function renderTaskDetail(slot, { params, query }) {
 
   function openEdit(opener) {
     openTaskDialog({
-      opener, eventId, task, teamMembers: project.teamMembers,
+      opener, eventId, task, teamMembers: project.teamMembers, timeZone: project.timeZone,
       onSaved: (saved) => { task = saved; render(); announce('Изменения сохранены', 0); },
     });
   }

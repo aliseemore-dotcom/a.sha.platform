@@ -72,6 +72,7 @@ export function renderTaskList(slot, { params, query }) {
       opener: addBtn,
       eventId,
       teamMembers: project.teamMembers,
+      timeZone: project.timeZone,
       onSaved: () => { state = { ...state, tab: 'open' }; applyState(); announce('Задача добавлена', 0); },
     });
   }
@@ -107,17 +108,37 @@ export function renderTaskList(slot, { params, query }) {
   const sortField = h('div', { class: 'field field--inline' },
     h('label', { class: 'field__label', for: 'tasks-sort' }, 'Сортировка'), sortSelect);
 
-  const filters = h('div', { class: 'task-filters' },
-    h('div', { class: 'search' },
-      h('label', { class: 'visually-hidden', for: 'tasks-search' }, 'Найти задачу'), searchInput),
+  // Поиск и статус — видны всегда; остальное под «Фильтры», чтобы список задач не начинался с
+  // двух рядов контролов (ТЗ 09, §3.3). Индикатор на кнопке — сколько из скрытых условий активно.
+  const moreToggle = h('button', {
+    type: 'button', class: 'btn btn--secondary btn--small task-filters__toggle', 'aria-expanded': 'false', 'aria-controls': 'tasks-more-filters',
+  }, 'Фильтры');
+  const moreFilters = h('div', { class: 'task-filters__more', id: 'tasks-more-filters', hidden: true },
     h('div', { class: 'field field--inline' },
       h('label', { class: 'field__label', for: 'tasks-assignee' }, 'Ответственный'), assigneeSelect),
-    statusField,
     h('label', { class: 'checkbox checkbox--filter', for: 'tasks-attention' }, attentionCheckbox, h('span', {}, 'Требует внимания')),
     h('label', { class: 'checkbox checkbox--filter', for: 'tasks-no-due' }, noDueCheckbox, h('span', {}, 'Без срока')),
     followupField,
     sortField,
-    resetBtn,
+  );
+  let filtersExpanded = Boolean(state.assignee || state.attention || state.noDue || state.followup || state.sort !== 'attention');
+
+  function setFiltersExpanded(open) {
+    filtersExpanded = open;
+    moreFilters.hidden = !open;
+    moreToggle.setAttribute('aria-expanded', String(open));
+  }
+  moreToggle.addEventListener('click', () => setFiltersExpanded(!filtersExpanded));
+
+  const filters = h('div', { class: 'task-filters' },
+    h('div', { class: 'task-filters__row' },
+      h('div', { class: 'search' },
+        h('label', { class: 'visually-hidden', for: 'tasks-search' }, 'Найти задачу'), searchInput),
+      statusField,
+      moreToggle,
+      resetBtn,
+    ),
+    moreFilters,
   );
 
   const tabOpen = h('a', { class: 'tab' }, 'Открытые');
@@ -145,6 +166,11 @@ export function renderTaskList(slot, { params, query }) {
     statusField.hidden = state.tab !== 'open';
     followupField.hidden = state.tab !== 'open';
     sortField.hidden = state.tab !== 'open';
+
+    const activeCount = [state.assignee, state.attention, state.noDue,
+      state.tab === 'open' && state.followup, state.sort !== 'attention'].filter(Boolean).length;
+    moreToggle.textContent = activeCount ? `Фильтры · ${activeCount}` : 'Фильтры';
+    if (activeCount && !filtersExpanded) setFiltersExpanded(true);
   }
 
   function syncUrl() {
@@ -302,8 +328,10 @@ export function renderTaskList(slot, { params, query }) {
       listSlot.append(emptyState());
       return;
     }
-    const timeZone = listData.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-    listSlot.append(h('ul', { class: 'task-list' }, items.map((t) => taskItemRow(t, timeZone))));
+    // Пояс пространства из project.timeZone — не браузера (ТЗ 09, §3.1): `listData` его не
+    // возвращает, а бывший запасной вариант через resolvedOptions() подставлял местный пояс
+    // компьютера и расходился с остальными экранами.
+    listSlot.append(h('ul', { class: 'task-list' }, items.map((t) => taskItemRow(t, project.timeZone))));
     if (nextCursor) {
       listSlot.append(h('div', { class: 'list-more' },
         h('button', { type: 'button', class: 'btn btn--secondary', onclick: (e) => loadMore(e.currentTarget) },

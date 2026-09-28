@@ -114,7 +114,10 @@ export function openVendorPickerPanel({ opener, eventId, onAdded }) {
   addNewBtn.addEventListener('click', () => {
     openVendorDialog({
       opener: addNewBtn,
-      onSaved: (v) => { personal = [...personal, v]; renderItems(); },
+      // Новая запись — сразу отмечена: организатор открыл диалог именно чтобы выбрать подрядчика
+      // для этой свадьбы, а не просто пополнить личную базу (ТЗ 09, §2). Добавление в свадьбу —
+      // всё равно только по «Добавить N», явным действием.
+      onSaved: (v) => { personal = [...personal, v]; checked.add(v.id); renderItems(); updateSubmit(); },
     });
   });
 

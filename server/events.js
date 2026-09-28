@@ -116,15 +116,19 @@ function withDefaults(e) {
   };
 }
 
-/** Шаги настройки свадьбы (§4.1) — из того же снимка, что и остальные счётчики. */
+/**
+ * Шаги настройки свадьбы (§4.1) — из того же снимка, что и остальные счётчики. Критерий каждого
+ * шага — только то, что действительно обязательно (ТЗ 09, §1.2): «Данные пары» не требуют
+ * дополнительного контакта, «Бюджет» — явного ориентира, а не случайной строки расходов, которая
+ * появляется от одного лишь добавления подрядчика-кандидата.
+ */
 export function computeSetupSteps(store, event, tasks) {
-  const hasContact = (event.contacts ?? []).some((c) => c.phone || c.email);
   const steps = [
     { key: 'date', done: event.eventDatePrecision === 'day' },
-    { key: 'couple', done: Boolean(event.partner1Name) && Boolean(event.partner2Name) && hasContact },
+    { key: 'couple', done: Boolean(event.partner1Name) && Boolean(event.partner2Name) },
     { key: 'plan', done: tasks.length > 0 },
     { key: 'vendors', done: store.eventVendorsForEvent(event.id).length > 0 },
-    { key: 'budget', done: Boolean(event.budgetTarget) || store.budgetLinesForEvent(event.id).length > 0 },
+    { key: 'budget', done: Boolean(event.budgetTarget) },
   ];
   return { done: steps.filter((s) => s.done).length, total: steps.length, steps };
 }

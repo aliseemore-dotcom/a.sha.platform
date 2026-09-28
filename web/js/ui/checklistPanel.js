@@ -66,18 +66,25 @@ export function openChecklistPanel({ opener, eventId, onAdded }) {
         updateSubmit();
       },
     });
+    const ruleLabelEl = item.ruleLabel ? h('span', { class: 'checklist-item__rule caption' }, item.ruleLabel) : null;
     let dateInput = null;
     if (loaded.eventDate) {
       dateInput = h('input', {
         type: 'date', class: 'input checklist-item__date', 'aria-label': `Срок: ${item.title}`,
         value: dueDates.get(item.key) ?? '',
         max: loaded.eventDate,
-        onchange: (e) => { dueDates.set(item.key, e.currentTarget.value); edited.add(item.key); },
+        onchange: (e) => {
+          dueDates.set(item.key, e.currentTarget.value);
+          edited.add(item.key);
+          // Подпись объясняла предложенный срок — после ручной правки даты она перестаёт быть
+          // верной (ТЗ 09, §3.2), поэтому не оставляем её как есть.
+          if (ruleLabelEl) ruleLabelEl.textContent = 'срок изменён вручную';
+        },
       });
     }
     return h('li', { class: 'checklist-item' },
       h('label', { class: 'checkbox checklist-item__check', for: id }, checkbox, h('span', {}, item.title)),
-      item.ruleLabel ? h('span', { class: 'checklist-item__rule caption' }, item.ruleLabel) : null,
+      ruleLabelEl,
       dateInput,
     );
   }

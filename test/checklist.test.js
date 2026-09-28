@@ -115,3 +115,26 @@ test('существующие задачи проекта не удаляютс
   assert.equal(kept.title, 'Своя задача');
   assert.equal(kept.status, 'in_progress');
 });
+
+// ---------- подписи срока согласуются с фактической датой (ТЗ 09, §3.2) ----------
+
+test('подпись правила пересчитывается из назначенной даты, а не хранится статично', () => {
+  const { event, ctx, owner } = setup();
+  // NOON = 23 сентября 2026 — свадьба через 120 дней запускает сжатие для «Подобрать площадки»
+  // (300 дней «идеального» срока), назначенная дата окажется намного ближе, чем 300 дней.
+  const e = event({ eventDate: '2027-01-21' });
+  const { items } = getChecklist(ctx(owner), e.id);
+  const venue = items.find((i) => i.key === 'venue-shortlist');
+  assert.ok(venue.suggestedDueDate);
+  const daysBeforeWedding = Math.round((Date.parse(e.eventDate) - Date.parse(venue.suggestedDueDate)) / 86400000);
+  assert.ok(daysBeforeWedding < 300, 'срок должен быть сжат, иначе тест не проверяет нужный случай');
+  // Подпись не должна утверждать «10 мес.», если реальный срок — около 3-4 месяцев.
+  assert.ok(!venue.ruleLabel.includes('10 мес'), `подпись должна согласовываться с датой: ${venue.ruleLabel}`);
+});
+
+test('без даты свадьбы подписи правил отсутствуют (как и сами сроки)', () => {
+  const { event, ctx, owner } = setup();
+  const e = event({ eventDate: null });
+  const { items } = getChecklist(ctx(owner), e.id);
+  assert.ok(items.every((i) => i.ruleLabel === null));
+});

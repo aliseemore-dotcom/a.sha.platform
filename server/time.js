@@ -45,6 +45,21 @@ export function startOfLocalDay(date, timeZone) {
   return result;
 }
 
+/**
+ * Момент (ms) конкретных даты и времени в поясе `timeZone` — аналог `startOfLocalDay`, но для
+ * произвольного времени суток, а не только полуночи. Нужен, чтобы «09:52 по поясу пространства»
+ * не превращалось в «09:52 UTC» при сохранении (ТЗ 09, §3.1).
+ */
+export function localDateTimeToMs(date, time, timeZone) {
+  const [y, m, d] = date.split('-').map(Number);
+  const [hh, mm] = time.split(':').map(Number);
+  const guess = Date.UTC(y, m - 1, d, hh, mm);
+  let result = guess - offsetAt(guess, timeZone);
+  // Повторная поправка на случай перехода на летнее/зимнее время в этот момент.
+  result = guess - offsetAt(result, timeZone);
+  return result;
+}
+
 export function addDays(date, days) {
   const [y, m, d] = date.split('-').map(Number);
   const t = new Date(Date.UTC(y, m - 1, d + days));

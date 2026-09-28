@@ -1,11 +1,10 @@
-// Диалог «Новая свадьба» (docs/specs/07-wedding-setup.md, §2.1). Нативный <dialog>: Escape,
+// Диалог «Новая свадьба» (docs/specs/09-mvp-polish.md, §1.1). Нативный <dialog>: Escape,
 // модальность, возврат фокуса на кнопку-источник. На узком экране — полноэкранный sheet (CSS).
-// Второй блок («Контакты, гости, бюджет») свёрнут по умолчанию — заполнить можно позже.
+// Контакты, гости и бюджет сюда не входят: это не нужно для создания проекта и превращает
+// короткий первый шаг в анкету — заполняются позже в «Данные свадьбы» (editEventDialog.js).
 
 import { h } from '../dom.js';
 import { api } from '../api.js';
-import { CURRENCIES, CURRENCY_LABEL, DEFAULT_CURRENCY } from '../currencies.js';
-import { CONTACT_RELATIONS, RELATION_LABEL } from '../contactRelations.js';
 
 const NAME_MAX = 60;
 const TITLE_MAX = 100;
@@ -44,7 +43,6 @@ export function openCreateDialog({ opener, onCreated }) {
   let saving = false;
   let titleEditing = false;
   let datePrecision = 'day'; // 'day' | 'month' | 'none'
-  let contactsExpanded = false;
 
   // ---------- основное ----------
 
@@ -88,41 +86,6 @@ export function openCreateDialog({ opener, onCreated }) {
     h('label', { class: 'checkbox', for: 'new-event-plan' }, planCheckbox, h('span', {}, 'Добавить стартовый план — 13 задач')),
     planCaption);
 
-  // ---------- контакты, гости, бюджет ----------
-
-  const contactName = h('input', { type: 'text', class: 'input', autocomplete: 'off', maxlength: '110' });
-  const contactRelation = h('select', { class: 'input select' }, CONTACT_RELATIONS.map((r) => h('option', { value: r }, RELATION_LABEL[r])));
-  contactRelation.value = 'parent';
-  const contactPhone = h('input', { type: 'tel', class: 'input', autocomplete: 'off' });
-  const contactEmail = h('input', { type: 'email', class: 'input', autocomplete: 'off' });
-  const contactNameField = field({ id: 'new-event-contact-name', label: 'Имя', input: contactName, hint: 'Необязательно' });
-  const contactPhoneField = field({ id: 'new-event-contact-phone', label: 'Телефон', input: contactPhone });
-  const contactEmailField = field({ id: 'new-event-contact-email', label: 'Email', input: contactEmail });
-
-  const guestsInput = h('input', { type: 'number', class: 'input', min: '1', max: '2000' });
-  const guestsField = field({ id: 'new-event-guests', label: 'Примерно гостей', input: guestsInput, hint: 'Необязательно' });
-
-  const budgetAmount = h('input', { type: 'number', class: 'input', min: '0', step: 'any' });
-  const budgetCurrency = h('select', { class: 'input select' }, CURRENCIES.map((c) => h('option', { value: c }, CURRENCY_LABEL[c] ?? c)));
-  budgetCurrency.value = DEFAULT_CURRENCY;
-  const budgetField = field({ id: 'new-event-budget', label: 'Ориентир бюджета', input: budgetAmount, hint: 'Необязательно' });
-
-  const extraToggle = h('button', {
-    type: 'button', class: 'disclosure-toggle', 'aria-expanded': 'false',
-  }, h('span', { class: 'disclosure-toggle__caret', 'aria-hidden': 'true' }, '▸'), 'Контакты, гости, бюджет — можно заполнить позже');
-  const extraBody = h('div', { class: 'disclosure-body', hidden: true },
-    h('div', { class: 'field-row' }, contactNameField.wrap, h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'Кем приходится'), contactRelation)),
-    h('div', { class: 'field-row' }, contactPhoneField.wrap, contactEmailField.wrap),
-    guestsField.wrap,
-    h('div', { class: 'field-row' }, budgetField.wrap, h('div', { class: 'field' }, h('label', { class: 'field__label' }, 'Валюта'), budgetCurrency)));
-
-  extraToggle.addEventListener('click', () => {
-    contactsExpanded = !contactsExpanded;
-    extraBody.hidden = !contactsExpanded;
-    extraToggle.setAttribute('aria-expanded', String(contactsExpanded));
-    extraToggle.classList.toggle('disclosure-toggle--open', contactsExpanded);
-  });
-
   // ---------- каркас ----------
 
   const banner = h('div', { class: 'banner banner--error', role: 'alert', hidden: true });
@@ -152,8 +115,6 @@ export function openCreateDialog({ opener, onCreated }) {
       dateMonthField.wrap,
       locationField.wrap,
       planRow,
-      extraToggle,
-      extraBody,
     ),
     confirmBox,
     h('div', { class: 'dialog__foot' }, cancel, submit),
@@ -212,28 +173,19 @@ export function openCreateDialog({ opener, onCreated }) {
     saving = on;
     submit.textContent = on ? 'Создаём…' : 'Создать свадьбу';
     submit.setAttribute('aria-busy', on ? 'true' : 'false');
-    for (const el of [p1Input, p2Input, titleInput, dateDay, dateMonth, locationInput, planCheckbox,
-      contactName, contactRelation, contactPhone, contactEmail, guestsInput, budgetAmount, budgetCurrency, cancel]) el.disabled = on;
+    for (const el of [p1Input, p2Input, titleInput, dateDay, dateMonth, locationInput, planCheckbox, cancel]) el.disabled = on;
     for (const r of dateModeRadios) r.querySelector('input').disabled = on;
     if (!on) validate({ show: false });
   }
 
   const isDirty = () => Boolean(
     p1Input.value.trim() || p2Input.value.trim() || titleInput.value.trim() || dateDay.value || dateMonth.value
-    || locationInput.value.trim() || !planCheckbox.checked || contactName.value.trim() || contactPhone.value.trim()
-    || contactEmail.value.trim() || guestsInput.value || budgetAmount.value,
+    || locationInput.value.trim() || !planCheckbox.checked,
   );
 
   function values() {
     const eventDate = datePrecision === 'day' ? (dateDay.value || null)
       : datePrecision === 'month' ? (dateMonth.value ? `${dateMonth.value}-01` : null) : null;
-    const contacts = [];
-    if (contactName.value.trim() && (contactPhone.value.trim() || contactEmail.value.trim())) {
-      contacts.push({
-        name: contactName.value.trim(), relation: contactRelation.value,
-        phone: contactPhone.value.trim() || null, email: contactEmail.value.trim() || null,
-      });
-    }
     return {
       partner1Name: p1Input.value.trim() || null,
       partner2Name: p2Input.value.trim() || null,
@@ -243,9 +195,6 @@ export function openCreateDialog({ opener, onCreated }) {
       eventDatePrecision: eventDate ? datePrecision : null,
       locationName: locationInput.value,
       applyPlan: planCheckbox.checked,
-      contacts,
-      guestsCount: guestsInput.value ? Number(guestsInput.value) : null,
-      budgetTarget: budgetAmount.value ? { amount: Number(budgetAmount.value), currency: budgetCurrency.value } : null,
     };
   }
 

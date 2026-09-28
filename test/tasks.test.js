@@ -167,3 +167,14 @@ test('переход в done снимает активную блокировк�
   const restored = restoreTask(ctx(owner), e.id, t.id);
   assert.equal(restored.status, 'waiting');
 });
+
+// ---------- срок со временем: пояс пространства, а не сервера (ТЗ 09, §3.1) ----------
+
+test('срок со временем сохраняется в поясе пространства, а не в местном времени сервера', () => {
+  const { event, ctx, owner } = setup();
+  const e = event();
+  const t = createTask(ctx(owner), e.id, { title: 'Задача', idempotencyKey: 'key-tz-0001' });
+  const updated = updateTask(ctx(owner), e.id, t.id, { hasDue: true, dueDate: '2026-10-05', dueTime: '09:52' });
+  // Europe/Moscow — всегда UTC+3, без перехода на летнее время: 09:52 МСК = 06:52 UTC.
+  assert.equal(updated.dueAt, new Date(Date.UTC(2026, 9, 5, 6, 52)).toISOString());
+});

@@ -31,11 +31,19 @@ export function seedDemo(store, now = Date.now()) {
   ];
   users.forEach((u) => store.insertUser(u));
 
-  const ev = (id, title, eventDate, locationName, extra = {}) => store.insertEvent({
-    id, workspaceId: 'ws_demo', title, kind: 'wedding', eventDate, locationName,
-    lifecycle: 'active', coverUrl: null, memberIds: [], planStatus: 'ready',
-    createdAt: nowIso, updatedAt: nowIso, createdBy: 'usr_elena', ...extra,
-  });
+  // Название всех демо-свадеб — «Имя + Имя»: раскладываем на partner1Name/partner2Name здесь же,
+  // а не оставляем их пустыми (ТЗ 09, §1.2 — иначе «Данные пары» читались бы как незаполненные,
+  // хотя в названии оба имени уже видны). Это безопасно только для этих собственных фикстур с
+  // заведомо известным разбиением — не общее правило для произвольных названий.
+  const ev = (id, title, eventDate, locationName, extra = {}) => {
+    const [partner1Name, partner2Name] = title.split(' + ');
+    return store.insertEvent({
+      id, workspaceId: 'ws_demo', title, titleIsCustom: false, partner1Name, partner2Name,
+      kind: 'wedding', eventDate, eventDatePrecision: eventDate ? 'day' : null, locationName,
+      lifecycle: 'active', coverUrl: null, memberIds: [], planStatus: 'ready',
+      createdAt: nowIso, updatedAt: nowIso, createdBy: 'usr_elena', ...extra,
+    });
+  };
 
   let n = 0;
   const task = (eventId, title, status, extra = {}) => store.insertTask({
@@ -98,8 +106,9 @@ export function seedDemo(store, now = Date.now()) {
   task('evt_demo_sofia_artem', 'Закрыть расчёты с подрядчиками', 'in_progress', { dueDate: day(-190) });
 
   store.insertEvent({
-    id: 'evt_demo_other', workspaceId: 'ws_other', title: 'Виктория + Олег', kind: 'wedding',
-    eventDate: day(90), locationName: 'Чужая площадка', lifecycle: 'active', coverUrl: null,
+    id: 'evt_demo_other', workspaceId: 'ws_other', title: 'Виктория + Олег', titleIsCustom: false,
+    partner1Name: 'Виктория', partner2Name: 'Олег', kind: 'wedding',
+    eventDate: day(90), eventDatePrecision: 'day', locationName: 'Чужая площадка', lifecycle: 'active', coverUrl: null,
     memberIds: [], planStatus: 'ready', createdAt: nowIso, updatedAt: nowIso, createdBy: 'usr_other',
   });
   store.insertTask({

@@ -196,3 +196,29 @@ test('архивный проект — только чтение', () => {
   assert.throws(() => addManualLine(ctx, e.id, { category: 'Площадка', title: 'Аренда' }),
     (err) => err instanceof ServiceError && err.status === 409);
 });
+
+test('строка сметы подрядчика показывает его статус (кандидат/подтверждён) — для честной подписи в UI', () => {
+  const { event, owner, store } = setup();
+  const ctx = ctxOf(store, owner);
+  const e = event();
+  const host = createVendor(ctx, { category: 'Ведущий', name: 'Ведущий А', price: 50000, currency: 'RUB' });
+  const added = addEventVendors(ctx, e.id, { vendorIds: [host.id], idempotencyKey: 'add-key-vs-0001' });
+  const vendorLinkId = added.items[0].id;
+
+  let line = getBudget(ctx, e.id).lines.find((l) => l.title === 'Ведущий А');
+  assert.equal(line.vendorStatus, 'candidate');
+  assert.equal(line.included, false);
+
+  updateEventVendorStatus(ctx, e.id, vendorLinkId, 'confirmed');
+  line = getBudget(ctx, e.id).lines.find((l) => l.title === 'Ведущий А');
+  assert.equal(line.vendorStatus, 'confirmed');
+  assert.equal(line.included, true);
+});
+
+test('ручной расход не привязан к подрядчику — vendorStatus отсутствует', () => {
+  const { event, owner, store } = setup();
+  const ctx = ctxOf(store, owner);
+  const e = event();
+  const line = addManualLine(ctx, e.id, { category: 'Транспорт', title: 'Трансфер', amount: 5000 });
+  assert.equal(line.vendorStatus, null);
+});

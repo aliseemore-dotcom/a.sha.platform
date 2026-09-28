@@ -4,7 +4,7 @@
 
 import { classifyTask } from './attention.js';
 import { canSeeEvent } from './access.js';
-import { isValidDate, localDate } from './time.js';
+import { isValidDate, localDate, localDateTimeToMs } from './time.js';
 import { ServiceError } from './errors.js';
 
 export { ServiceError };
@@ -224,7 +224,7 @@ function trimmedOrNull(v, max) {
  * Проверяет входные поля создания/редактирования. `partial` — при редактировании: поле,
  * отсутствующее в теле запроса, не проверяется и не меняется (кроме зависимых очисток).
  */
-function validateFields(body, event, store, { partial }) {
+function validateFields(body, event, store, { partial }, timeZone) {
   const fields = {};
   const patch = {};
 
@@ -267,7 +267,9 @@ function validateFields(body, event, store, { partial }) {
       if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(body.dueTime)) {
         fields.dueDate = 'Неверное время';
       } else {
-        patch.dueAt = new Date(`${body.dueDate}T${body.dueTime}:00`).toISOString();
+        // Дата+время заданы в поясе пространства, не в местном времени сервера (ТЗ 09, §3.1) —
+        // иначе один и тот же срок расходится в интерфейсе на несколько часов.
+        patch.dueAt = new Date(localDateTimeToMs(body.dueDate, body.dueTime, timeZone)).toISOString();
         patch.dueDate = null;
       }
     } else {
@@ -323,7 +325,7 @@ export function createTask(ctx, eventId, body) {
   const previous = store.getIdempotent(user.id, key);
   if (previous) return publicTask(ctx, store.getTask(previous.taskId));
 
-  const patch = validateFields({ status: 'todo', ...body }, event, store, { partial: false });
+  const patch = validateFields({ status: 'todo', ...body }, event, store, { partial: false }, ctx.timeZone);
   const nowIso = new Date(now).toISOString();
   const task = {
     id: store.newId('task'),
@@ -370,7 +372,7 @@ export function updateTask(ctx, eventId, taskId, body) {
     throw new ServiceError(409, 'conflict', 'Задачу уже изменил другой участник', null);
   }
 
-  const patch = validateFields(body, event, store, { partial: true });
+  const patch = validateFields(body, event, store, { partial: true }, ctx.timeZone);
   const prevStatus = task.status;
 
   if (patch.status === 'done' && prevStatus !== 'done') {
