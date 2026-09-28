@@ -52,7 +52,8 @@ export function renderVendors(slot) {
   );
 
   const listSlot = h('div', { class: 'list-slot' });
-  const main = h('main', { id: 'main', class: 'container page' }, head, toolbar, listSlot);
+  const back = h('p', { class: 'back' }, h('a', { href: '/events', class: 'link' }, '← Мои мероприятия'));
+  const main = h('main', { id: 'main', class: 'container page' }, back, head, toolbar, listSlot);
   slot.append(main);
 
   function emptyState() {

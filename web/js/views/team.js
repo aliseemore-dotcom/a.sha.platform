@@ -97,7 +97,10 @@ export function renderTeam(slot) {
       const { items } = await api.getTeam();
       render(items);
     } catch (err) {
-      main.append(h('div', { class: 'empty', role: 'alert' }, h('p', { class: 'empty__title' }, err.message)));
+      main.append(
+        h('p', { class: 'back' }, h('a', { href: '/events', class: 'link' }, '← Мои мероприятия')),
+        h('div', { class: 'empty', role: 'alert' }, h('p', { class: 'empty__title' }, err.message)),
+      );
     }
   }
 
@@ -214,6 +217,7 @@ export function renderTeam(slot) {
     clear(main);
     // main.append — нативный Element.append, а не наш h()-хелпер: null стал бы текстом "null".
     main.append(...[
+      h('p', { class: 'back' }, h('a', { href: '/events', class: 'link' }, '← Мои мероприятия')),
       h('div', { class: 'page-head' },
         h('h1', { class: 'page-title' }, 'Команда'),
         h('button', {

@@ -30,7 +30,10 @@ export function renderWorkspaceSettings(slot) {
       const ws = await api.getWorkspace();
       render(ws);
     } catch (err) {
-      main.append(h('div', { class: 'empty', role: 'alert' }, h('p', { class: 'empty__title' }, err.message)));
+      main.append(
+        h('p', { class: 'back' }, h('a', { href: '/events', class: 'link' }, '← Мои мероприятия')),
+        h('div', { class: 'empty', role: 'alert' }, h('p', { class: 'empty__title' }, err.message)),
+      );
     }
   }
 
@@ -100,6 +103,7 @@ export function renderWorkspaceSettings(slot) {
     });
 
     main.append(
+      h('p', { class: 'back' }, h('a', { href: '/events', class: 'link' }, '← Мои мероприятия')),
       h('div', { class: 'page-head' }, h('h1', { class: 'page-title' }, 'Пространство')),
       form,
     );
