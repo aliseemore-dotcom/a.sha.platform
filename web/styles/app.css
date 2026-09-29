@@ -661,7 +661,11 @@ input.input[type="date"], input.input[type="time"] { height: var(--control-h); }
 }
 .dialog__head .icon-btn { margin: -10px -12px -10px 0; }
 .dialog__title { font-size: 24px; font-weight: var(--fw-heading); letter-spacing: -0.015em; line-height: 1.2; }
-.dialog__body { padding: var(--space-1) 28px; overflow-y: auto; display: grid; gap: 12px; }
+/* align-content: start — та же причина, что у .field выше: на mobile .dialog__body получает
+   flex:1 и растягивается на всю высоту полноэкранного диалога, а grid по умолчанию растягивает
+   свои строки на образовавшееся пустое место — между полями появлялись огромные пустые
+   промежутки вместо обычного вертикального ритма (MOBILE ADAPTATION, п. 2–4). */
+.dialog__body { padding: var(--space-1) 28px; overflow-y: auto; display: grid; gap: 12px; align-content: start; }
 .dialog__foot {
   display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1);
   padding: 20px 28px 28px;
@@ -1495,4 +1499,32 @@ textarea.input { min-height: 88px; padding: var(--space-1) var(--space-2); resiz
 }
 @media (max-width: 599px) {
   .overview-grid .zone--compact { padding: var(--space-2) 20px; }
+}
+
+/* ---------- MOBILE ADAPTATION (<= 768px) ---------- */
+/* Общие компоненты (Input/Select/Textarea/Button/Dialog/FormGroup/Empty), не экраны по одному —
+   почти все жалобы («огромные пустые промежутки» в «Пригласить», «Новая свадьба», «Данные
+   свадьбы», «Выбрать подрядчиков») были одной и той же причиной, см. .dialog__body выше:
+   на mobile тело диалога получает flex:1 (растягивается на весь полноэкранный лист), а grid по
+   умолчанию растягивает свои строки на освободившееся место. Экранных костылей ниже — по
+   минимуму, только то, что не решается на уровне общего компонента. */
+@media (max-width: 768px) {
+  /* Контрол компактнее по высоте/паддингам, не по шрифту — тач-таргет 48px (было 44px). */
+  :root { --control-h: 48px; }
+  textarea.input { min-height: 72px; }
+
+  /* Ритм внутри диалога: группа полей → следующая группа — 20–24px; секция → секция — 28–32px. */
+  .dialog__body { gap: var(--space-3); }
+  .edit-section + .edit-section { margin-top: var(--space-3); padding-top: var(--space-3); }
+
+  /* Пустое состояние (например, «Выбрать подрядчиков» без единого подрядчика в базе) —
+     компактнее по внутренним отступам, без сокращения текста. */
+  .empty { padding: var(--space-2) var(--space-3); gap: var(--space-1); }
+
+  /* Кнопки в подвале диалога: рядом, пока помещается их собственный текст (min-width:
+     max-content не даёт сжаться до обрезки/переноса слов); если вдвоём не помещаются —
+     flex-wrap уже на .dialog__foot переносит вторую кнопку на свою строку, во всю ширину,
+     а не срезает подпись. Раньше flex:1 принудительно делил подвал пополам независимо от
+     длины текста («Добавить подрядчиков» стягивалось на половину экрана). */
+  .dialog__foot .btn { flex: 1 1 auto; min-width: max-content; }
 }
