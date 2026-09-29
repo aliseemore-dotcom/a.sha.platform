@@ -7,6 +7,10 @@
    `.btn[hidden]`, `.field-row[hidden]` и т.п. иначе остаются видимыми). */
 [hidden] { display: none !important; }
 
+/* overflow-x: hidden — страховка от горизонтальной прокрутки на mobile (MOBILE ADAPTATION,
+   общие правила): без нашей ошибки в вёрстке её быть не должно, но лучше не полагаться на то,
+   что она нигде не появится снова. */
+html, body { overflow-x: hidden; max-width: 100%; }
 html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
@@ -675,8 +679,14 @@ input.input[type="date"], input.input[type="time"] { height: var(--control-h); }
 .dialog__foot .dialog__foot-extra { flex: 1 1 100%; order: -1; margin-right: auto; margin-bottom: var(--space-1); }
 @media (max-width: 767px) {
   .dialog {
-    width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0;
+    /* Не 100vw — этот юнит включает ширину системного скроллбара (даже «невидимого»
+       overlay-скроллбара в части мобильных браузеров), из-за чего лист оказывался на
+       несколько пикселей шире реального видимого экрана и требовал горизонтальной
+       прокрутки. 100% у модального <dialog> в top layer считается от того же видимого
+       вьюпорта, без этой прибавки. */
+    width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; margin: 0;
     border-radius: 0;
+    overflow-x: hidden;
   }
   .dialog__form { height: 100%; }
   .dialog__body { flex: 1; }
