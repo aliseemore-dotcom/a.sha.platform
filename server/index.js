@@ -133,9 +133,14 @@ const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'same-origin',
   'X-Frame-Options': 'DENY',
+  // Яндекс.Метрика (web/index.html): инлайн-загрузчик разрешён точечно по хэшу содержимого
+  // (не 'unsafe-inline' — иначе CSP перестаёт защищать от инъекции произвольного инлайн-скрипта).
+  // Хэш пересчитывать при любом изменении текста скрипта в index.html.
   'Content-Security-Policy':
-    "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; " +
-    "font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    "default-src 'self'; img-src 'self' data: blob: https://mc.yandex.ru; style-src 'self'; " +
+    "script-src 'self' https://mc.yandex.ru 'sha256-uyPFFtIZqFjiO6NFlL/4iSiJ2iDirjMFjIMeQ5MDFGk='; " +
+    "font-src 'self'; connect-src 'self' https://mc.yandex.ru; frame-ancestors 'none'; " +
+    "base-uri 'none'; form-action 'self'",
 };
 
 function send(res, status, body, headers = {}) {
