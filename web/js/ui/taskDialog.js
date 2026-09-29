@@ -58,12 +58,22 @@ export function openTaskDialog({ opener, eventId, teamMembers, timeZone, task = 
     teamMembers.map((u) => h('option', { value: u.id }, u.name)));
   assigneeSelect.value = task?.assigneeId ?? '';
 
+  // Точечное ТЗ, п. 5 и 7: «Заблокировано» — не отдельный чекбокс, а значение того же поля
+  // «Статус». Под капотом это по-прежнему отдельные `isBlocked`/`blockedReason` (задача может
+  // быть одновременно «В работе» и заблокирована — эту реальную сторону мы не трогаем), поэтому
+  // здесь же запоминаем последний «настоящий» статус на время, пока в выпадающем списке выбрано
+  // «Заблокировано». «Выполнено» — тот же переход, что и кнопка «Отметить выполненной»
+  // (сервер обрабатывает status: 'done' одинаково в обоих случаях, см. server/tasks.js).
+  const REAL_STATUSES = ['todo', 'in_progress', 'waiting', 'done'];
+  let underlyingStatus = REAL_STATUSES.includes(task?.status) ? task.status : 'todo';
   const statusSelect = h('select', { class: 'input select', name: 'status' },
     h('option', { value: 'todo' }, 'Не начато'),
     h('option', { value: 'in_progress' }, 'В работе'),
     h('option', { value: 'waiting' }, 'Ждём ответа'),
+    h('option', { value: 'blocked' }, 'Заблокировано'),
+    h('option', { value: 'done' }, 'Выполнено'),
   );
-  statusSelect.value = ['todo', 'in_progress', 'waiting'].includes(task?.status) ? task.status : 'todo';
+  statusSelect.value = task?.isBlocked ? 'blocked' : underlyingStatus;
 
   const hasDue = h('input', { type: 'checkbox', name: 'hasDue', id: 'task-has-due' });
   const dueDateInput = h('input', { type: 'date', class: 'input', name: 'dueDate' });
@@ -87,7 +97,6 @@ export function openTaskDialog({ opener, eventId, teamMembers, timeZone, task = 
   });
   const followUpInput = h('input', { type: 'date', class: 'input', name: 'followUpAt', value: task?.followUpAt?.slice(0, 10) ?? '' });
 
-  const blockedCheckbox = h('input', { type: 'checkbox', name: 'isBlocked', id: 'task-is-blocked', checked: Boolean(task?.isBlocked) });
   const blockedReasonInput = h('input', {
     type: 'text', class: 'input', name: 'blockedReason', autocomplete: 'off',
     maxlength: String(BLOCKED_REASON_MAX + 20), value: task?.blockedReason ?? '',
@@ -107,10 +116,7 @@ export function openTaskDialog({ opener, eventId, teamMembers, timeZone, task = 
     h('label', { class: 'checkbox', for: 'task-has-due' }, hasDue, h('span', {}, 'Срок выполнения')),
     dueWrap);
   const waitingSection = h('div', { hidden: true }, waitingFromField.wrap, followUpField.wrap);
-  const blockedSection = h('div', { class: 'field' },
-    h('label', { class: 'checkbox', for: 'task-is-blocked' }, blockedCheckbox, h('span', {}, 'Заблокировано')),
-    h('div', { hidden: true }, blockedReasonField.wrap));
-  const blockedReasonWrap = blockedSection.lastElementChild;
+  const blockedReasonWrap = h('div', { hidden: true }, blockedReasonField.wrap);
 
   const banner = h('div', { class: 'banner banner--error', role: 'alert', hidden: true });
   const submit = h('button', { type: 'submit', class: 'btn btn--primary' }, isEdit ? 'Сохранить' : 'Добавить задачу');
@@ -141,7 +147,7 @@ export function openTaskDialog({ opener, eventId, teamMembers, timeZone, task = 
       ),
       dueSection,
       waitingSection,
-      blockedSection,
+      blockedReasonWrap,
     ),
     confirmBox,
     h('div', { class: 'dialog__foot' }, cancel, submit),
@@ -157,20 +163,20 @@ export function openTaskDialog({ opener, eventId, teamMembers, timeZone, task = 
     waitingSection.hidden = statusSelect.value !== 'waiting';
     waitingFromInput.disabled = statusSelect.value !== 'waiting';
     followUpInput.disabled = statusSelect.value !== 'waiting';
-    blockedReasonWrap.hidden = !blockedCheckbox.checked;
-    blockedReasonInput.disabled = !blockedCheckbox.checked;
+    blockedReasonWrap.hidden = statusSelect.value !== 'blocked';
+    blockedReasonInput.disabled = statusSelect.value !== 'blocked';
   }
   syncContextFields();
 
   const isDirty = () => Boolean(
     titleInput.value.trim() || descInput.value.trim() || assigneeSelect.value
-    || hasDue.checked || waitingFromInput.value.trim() || followUpInput.value || blockedCheckbox.checked,
+    || hasDue.checked || waitingFromInput.value.trim() || followUpInput.value || statusSelect.value !== 'todo',
   );
 
   function validate({ show }) {
     const tErr = titleInput.value.trim() ? ([...titleInput.value.trim()].length > TITLE_MAX ? `Не более ${TITLE_MAX} символов` : null) : 'Укажите, что нужно сделать';
     const dueErr = hasDue.checked && dueDateInput.validity.badInput ? 'Укажите дату полностью' : null;
-    const blockedErr = blockedCheckbox.checked && !blockedReasonInput.value.trim() ? 'Укажите причину блокировки' : null;
+    const blockedErr = statusSelect.value === 'blocked' && !blockedReasonInput.value.trim() ? 'Укажите причину блокировки' : null;
     if (show || titleTouched) titleField.setError(tErr);
     dueDateField.setError(dueErr);
     blockedReasonField.setError(blockedErr);
@@ -183,24 +189,26 @@ export function openTaskDialog({ opener, eventId, teamMembers, timeZone, task = 
     submit.textContent = on ? 'Сохраняем…' : (isEdit ? 'Сохранить' : 'Добавить задачу');
     submit.setAttribute('aria-busy', on ? 'true' : 'false');
     for (const el of [titleInput, descInput, assigneeSelect, statusSelect, hasDue, dueDateInput, dueTimeInput,
-      waitingFromInput, followUpInput, blockedCheckbox, blockedReasonInput, cancel]) el.disabled = on;
+      waitingFromInput, followUpInput, blockedReasonInput, cancel]) el.disabled = on;
     if (!on) syncContextFields();
     validate({ show: false });
   }
 
   function values() {
+    const isBlocked = statusSelect.value === 'blocked';
+    const status = isBlocked ? underlyingStatus : statusSelect.value;
     const body = {
       title: titleInput.value,
       description: descInput.value,
       assigneeId: assigneeSelect.value || null,
-      status: statusSelect.value,
+      status,
       hasDue: hasDue.checked,
       dueDate: hasDue.checked ? dueDateInput.value : null,
       dueTime: hasDue.checked ? dueTimeInput.value : null,
-      isBlocked: blockedCheckbox.checked,
-      blockedReason: blockedCheckbox.checked ? blockedReasonInput.value : null,
+      isBlocked,
+      blockedReason: isBlocked ? blockedReasonInput.value : null,
     };
-    if (statusSelect.value === 'waiting') {
+    if (status === 'waiting') {
       body.waitingFrom = waitingFromInput.value;
       body.followUpAt = followUpInput.value || null;
     }
@@ -229,8 +237,12 @@ export function openTaskDialog({ opener, eventId, teamMembers, timeZone, task = 
   titleInput.addEventListener('blur', () => { titleTouched = true; validate({ show: false }); });
   hasDue.addEventListener('change', () => { syncContextFields(); validate({ show: false }); });
   dueDateInput.addEventListener('input', () => validate({ show: false }));
-  statusSelect.addEventListener('change', () => { syncContextFields(); validate({ show: false }); });
-  blockedCheckbox.addEventListener('change', () => { syncContextFields(); validate({ show: false }); if (blockedCheckbox.checked) blockedReasonInput.focus(); });
+  statusSelect.addEventListener('change', () => {
+    if (statusSelect.value !== 'blocked') underlyingStatus = statusSelect.value;
+    syncContextFields();
+    validate({ show: false });
+    if (statusSelect.value === 'blocked') blockedReasonInput.focus();
+  });
   blockedReasonInput.addEventListener('input', () => validate({ show: false }));
 
   cancel.addEventListener('click', requestClose);

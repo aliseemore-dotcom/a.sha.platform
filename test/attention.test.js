@@ -57,7 +57,7 @@ test('done и cancelled не попадают во внимание, даже з
   assert.equal(classifyTask({ ...base, status: 'todo' }, NOON, TZ), null);
 });
 
-test('сортировка внимания: заблокированные и просроченные вместе выше «Сегодня», старший срок выше, затем проект и id', () => {
+test('сортировка внимания (точечное ТЗ, п. 1): просроченные → «Сегодня» → заблокированные, внутри группы старший срок выше, затем проект и id', () => {
   const items = [
     { id: 't1', eventId: 'e2', kind: 'due_today', sortDue: 50 },
     { id: 't2', eventId: 'e1', kind: 'blocked', sortDue: null },
@@ -65,7 +65,7 @@ test('сортировка внимания: заблокированные и �
     { id: 't4', eventId: 'e2', kind: 'blocked', sortDue: 100 },
     { id: 't0', eventId: 'e2', kind: 'blocked', sortDue: null },
   ].sort(compareAttention);
-  assert.deepEqual(items.map((i) => i.id), ['t4', 't3', 't2', 't0', 't1']);
+  assert.deepEqual(items.map((i) => i.id), ['t3', 't1', 't4', 't2', 't0']);
 });
 
 test('nextChangeAt: ближайший dueAt или полночь пространства', () => {

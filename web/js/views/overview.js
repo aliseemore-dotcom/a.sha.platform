@@ -314,7 +314,9 @@ export function renderOverview(slot, { params, session, query }) {
    * продедуплицированные на сервере — то же число, что и на карточке списка.
    */
   function upcomingSection(upcoming, timeZone, now, event) {
-    const title = 'Дальше · 14 дней';
+    // «За 14 дней» — окно времени; отдельное число после « · » (если есть) — счётчик задач в нём.
+    // Раньше оба числа стояли рядом без разбора, что где («Дальше · 14 дней · 2» на скрине из ТЗ).
+    const title = 'Дальше за 14 дней';
     if (!upcoming.items.length) {
       if (upcoming.nearestBeyond) {
         const dueText = fullDate(upcoming.nearestBeyond.dueAt ? upcoming.nearestBeyond.dueAt.slice(0, 10) : upcoming.nearestBeyond.dueDate);

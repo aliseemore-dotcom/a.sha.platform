@@ -288,6 +288,12 @@ test('setup: 5 шагов, done растёт по мере заполнения'
   s = computeSetupSteps(store, withCouple, []);
   assert.equal(s.steps.find((x) => x.key === 'couple').done, true);
 
+  // Баг: имена вписаны одной строкой без «+» (например, «Анна и Максим») — splitNames на клиенте
+  // кладёт всё в partner1Name, partner2Name остаётся null. Шаг всё равно должен считаться готовым.
+  const oneName = { ...e, partner1Name: 'Анна и Максим', partner2Name: null };
+  s = computeSetupSteps(store, oneName, []);
+  assert.equal(s.steps.find((x) => x.key === 'couple').done, true);
+
   const withDate = { ...e, eventDatePrecision: 'day' };
   s = computeSetupSteps(store, withDate, []);
   assert.equal(s.steps.find((x) => x.key === 'date').done, true);

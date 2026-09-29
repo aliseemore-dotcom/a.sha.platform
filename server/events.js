@@ -125,7 +125,9 @@ function withDefaults(e) {
 export function computeSetupSteps(store, event, tasks) {
   const steps = [
     { key: 'date', done: event.eventDatePrecision === 'day' },
-    { key: 'couple', done: Boolean(event.partner1Name) && Boolean(event.partner2Name) },
+    // Хотя бы одно имя — иначе организатор, вписавший имена пары одной строкой без «+»
+    // (одно имя, оба через «и» и т. п.), вечно видит «Указать имена», хотя данные уже есть.
+    { key: 'couple', done: Boolean(event.partner1Name) || Boolean(event.partner2Name) },
     { key: 'plan', done: tasks.length > 0 },
     { key: 'vendors', done: store.eventVendorsForEvent(event.id).length > 0 },
     { key: 'budget', done: Boolean(event.budgetTarget) },

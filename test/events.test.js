@@ -33,8 +33,9 @@ test('2. просроченная и заблокированная из раз�
 
   let res = listEvents(ctx(owner));
   assert.equal(res.attentionTotal, 3);
+  // Порядок — точечное ТЗ, п. 1: просроченные → «Сегодня» → заблокированные.
   assert.deepEqual(res.attentionPreview.map((i) => [i.title, i.kind]),
-    [['Просрочена', 'overdue'], ['Блок', 'blocked'], ['Сегодня', 'due_today']]);
+    [['Просрочена', 'overdue'], ['Сегодня', 'due_today'], ['Блок', 'blocked']]);
   const byId = Object.fromEntries(res.items.map((i) => [i.id, i]));
   assert.equal(byId[e1.id].urgentCount, 2);
   assert.equal(byId[e2.id].urgentCount, 1);
@@ -145,7 +146,8 @@ test('4, 9. заблокированная просроченная задача
   let res = listEvents(ctx(owner));
   assert.equal(res.attentionTotal, 2);
   assert.equal(res.attentionPreview.filter((i) => i.id === t.id).length, 1);
-  assert.equal(res.attentionPreview[0].kind, 'blocked');
+  // Порядок — точечное ТЗ, п. 1: «Сегодня» выше заблокированной, если та не просрочена.
+  assert.equal(res.attentionPreview[0].kind, 'due_today');
   assert.equal(res.items[0].urgentCount, 2);
 
   const done = completeTask(ctx(owner), e.id, t.id);

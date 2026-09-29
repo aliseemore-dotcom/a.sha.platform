@@ -133,8 +133,9 @@ export function renderTaskDetail(slot, { params, query }) {
       }, CLOSED_STATUSES.has(task.status) ? 'Вернуть в работу' : 'Отметить выполненной')
       : null;
 
+    // Точечное ТЗ, п. 4: один способ вернуться (не два — отдельная ссылка сверху убрана),
+    // порядок действий — редактировать → отметить выполненной → вернуться.
     main.append(
-      h('p', { class: 'back' }, h('a', { href: back.href, class: 'link' }, `← ${back.label}`)),
       h('section', { class: 'task-panel', 'aria-labelledby': 'task-title', tabindex: '-1' },
         h('p', { class: 'overline' }, h('a', { href: overviewUrl, class: 'task-panel__project-link' }, project.title)),
         h('h1', { class: 'task-panel__title', id: 'task-title' }, task.title),
@@ -142,7 +143,7 @@ export function renderTaskDetail(slot, { params, query }) {
         h('dl', { class: 'task-panel__facts' },
           rows.map(([k, v]) => h('div', { class: 'task-panel__fact' }, h('dt', {}, k), h('dd', {}, v)))),
         !canEdit ? h('p', { class: 'caption' }, 'Проект в архиве — задача доступна только для просмотра') : null,
-        h('div', { class: 'task-panel__actions' }, toggleBtn, editBtn,
+        h('div', { class: 'task-panel__actions' }, editBtn, toggleBtn,
           h('a', { class: 'btn btn--secondary', href: back.href }, `← ${back.label}`)),
       ),
     );

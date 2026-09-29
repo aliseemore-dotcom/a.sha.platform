@@ -419,6 +419,10 @@ a { color: inherit; }
   width: 100%;
   transition: border-color .15s, box-shadow .15s;
 }
+/* Точечное ТЗ, п. 6: нативный `type="date"` в Chromium рендерит внутренний контрол выше, чем
+   `type="time"` (~57px против 44px) при одном и том же min-height, из-за чего «Дата» и «Время»
+   в .field-row визуально не совпадали по высоте и линии. Фиксируем обоим ровно --control-h. */
+input.input[type="date"], input.input[type="time"] { height: var(--control-h); }
 .input:hover:not(:disabled):not(:focus) { border-color: var(--ink-secondary); }
 .input::placeholder { color: var(--ink-secondary); opacity: 1; }
 /* Фокус поля — тёмная граница (брендбук, TextField): вместо двойного кольца с зазором —
@@ -683,7 +687,11 @@ a { color: inherit; }
 .edit-section + .edit-section { margin-top: var(--space-2); padding-top: 20px; border-top: 1px solid var(--line-hair); }
 .edit-section__title { margin: 0; }
 
-.field { display: grid; gap: 6px; }
+/* align-content: start — иначе в .field-row (flex, stretch по умолчанию) более короткое поле
+   (когда его hint/error пустые и не рендерятся) растягивается на высоту соседа, а его пустые
+   грид-строки растягиваются вместе с ним и сдвигают input вниз (точечное ТЗ, п. 6: «Дата» и
+   «Время» должны быть на одной линии). */
+.field { display: grid; gap: 6px; align-content: start; }
 .field__label { font-weight: var(--fw-title); font-size: 14px; }
 .field__hint { font-size: var(--fs-caption); color: var(--ink-secondary); min-height: 0; }
 .field__hint:empty { display: none; }
@@ -1468,3 +1476,23 @@ textarea.input { min-height: 88px; padding: var(--space-1) var(--space-2); resiz
   .task-filters__row > .search, .task-filters__row > .field--inline { grid-column: 1 / -1; }
 }
 @media (max-width: 767px) { .field--inline .field__label { margin-left: 0; } }
+
+/* ---------- точечное ТЗ, п. 2: пустая зона снова видимая плашка ---------- */
+/* Раньше без фона/рамки текст пустого состояния («Сейчас нет задач…», «Задач со сроком нет»)
+   визуально не читался как часть блока с заголовком над ним — плавал сам по себе на странице.
+   Возвращаем обычные токены карточки (не новые), которые .zone уже использует. */
+.zone--compact {
+  background: var(--surface-white);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  padding: var(--space-2) var(--space-3);
+  min-height: 0;
+}
+.overview-grid .zone--compact,
+.zones > .zone--compact {
+  padding: var(--space-2) var(--space-3);
+  padding-top: var(--space-2);
+}
+@media (max-width: 599px) {
+  .overview-grid .zone--compact { padding: var(--space-2) 20px; }
+}
