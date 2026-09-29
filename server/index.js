@@ -29,7 +29,10 @@ import { listTeam, inviteMember, resetLinkFor, updateTeamMember } from './team.j
 import { getEventMembersView, setEventMembers } from './eventMembers.js';
 import { inspectInvite, acceptInvite } from './auth/invites.js';
 import { attemptLogin } from './auth/login.js';
+import { registerWorkspace } from './auth/register.js';
+import { requestPasswordReset } from './auth/passwordReset.js';
 import { createSession, resolveSession, revokeSession } from './auth/sessions.js';
+import { sendPasswordResetEmail } from './mailer.js';
 import { runBackup, scheduleDailyBackup } from './backup.js';
 import { ServiceError } from './errors.js';
 import { hasPermission } from './access.js';
@@ -210,6 +213,26 @@ async function handleApi(req, res, url, now) {
     const sid = readCookies(req).sid;
     if (sid) revokeSession(store, sid);
     return json(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie('', 0) });
+  }
+
+  // ---------- регистрация и самостоятельный сброс пароля: доступны без сессии ----------
+
+  if (pathname === '/api/register' && method === 'POST') {
+    if (DEMO) return apiError(res, 404, 'not_found', 'Не найдено');
+    const body = await readJson(req);
+    const newUser = registerWorkspace(store, { ...body, timeZone: req.headers['x-time-zone'] }, clientIp(req), now);
+    const { token } = createSession(store, newUser.id, req.headers['user-agent'], now);
+    return json(res, 201, { ok: true }, { 'Set-Cookie': sessionCookie(token, 60 * 60 * 24 * 30) });
+  }
+
+  if (pathname === '/api/password-reset' && method === 'POST') {
+    const body = await readJson(req);
+    const result = requestPasswordReset(store, body?.email, clientIp(req), now);
+    if (result) {
+      sendPasswordResetEmail(result.email, `${PUBLIC_URL}/invite/${result.token}`).catch(() => {});
+    }
+    // Один и тот же ответ независимо от того, нашёлся ли email — не раскрываем, кто зарегистрирован.
+    return json(res, 200, { ok: true });
   }
 
   // ---------- приглашения и сброс пароля: доступны без сессии ----------
@@ -437,7 +460,7 @@ async function serveFile(res, relPath, cache = 'no-cache') {
 }
 
 // Пути, доступные без сессии — экраны входа и приглашения/сброса пароля.
-const PUBLIC_PAGES = [/^\/login$/, /^\/invite\/[A-Za-z0-9_-]{1,80}$/];
+const PUBLIC_PAGES = [/^\/login$/, /^\/register$/, /^\/invite\/[A-Za-z0-9_-]{1,80}$/];
 
 async function handle(req, res) {
   const url = new URL(req.url, 'http://localhost');

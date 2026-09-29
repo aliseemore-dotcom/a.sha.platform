@@ -51,6 +51,8 @@ export const api = {
   loginDemo: (userId) => request('POST', '/api/session', { userId }),
   login: (email, password) => request('POST', '/api/session', { email, password }),
   logout: () => request('DELETE', '/api/session'),
+  register: (body) => request('POST', '/api/register', body),
+  requestPasswordReset: (email) => request('POST', '/api/password-reset', { email }),
 
   getInvite: (token) => request('GET', `/api/invites/${encodeURIComponent(token)}`),
   acceptInvite: (token, body) => request('POST', `/api/invites/${encodeURIComponent(token)}/accept`, body),

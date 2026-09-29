@@ -72,8 +72,25 @@ function renderCredentialsForm(root, returnTo) {
   const banner = h('p', { class: 'form-error', role: 'alert' });
   const submit = h('button', { type: 'submit', class: 'btn btn--primary login-submit' }, 'Войти');
 
+  const resetEmailInput = h('input', { type: 'email', class: 'input', autocomplete: 'username', placeholder: 'Email' });
+  const resetStatus = h('p', { class: 'muted' });
+  const resetSubmit = h('button', { type: 'button', class: 'btn btn--secondary btn--small' }, 'Прислать ссылку');
+  resetSubmit.addEventListener('click', async () => {
+    if (!resetEmailInput.value.trim()) { resetStatus.textContent = 'Укажите email'; return; }
+    resetSubmit.disabled = true;
+    resetStatus.textContent = 'Отправляем…';
+    try {
+      await api.requestPasswordReset(resetEmailInput.value.trim());
+      resetStatus.textContent = 'Если такой email зарегистрирован, ссылка для сброса пароля отправлена на него.';
+    } catch {
+      resetStatus.textContent = 'Если такой email зарегистрирован, ссылка для сброса пароля отправлена на него.';
+    } finally {
+      resetSubmit.disabled = false;
+    }
+  });
   const forgot = h('div', { class: 'login-forgot', hidden: true },
-    h('p', { class: 'muted' }, 'Попросите владельца пространства прислать ссылку для сброса пароля.'));
+    h('div', { class: 'field-row' }, resetEmailInput, resetSubmit),
+    resetStatus);
   const forgotLink = h('button', {
     type: 'button', class: 'link-button',
     onclick: () => { forgot.hidden = !forgot.hidden; },
@@ -111,6 +128,7 @@ function renderCredentialsForm(root, returnTo) {
       h('div', { class: 'login__panel' },
         h('h1', { class: 'page-title' }, 'Вход'),
         form,
+        h('p', {}, h('a', { class: 'link', href: `/register${returnTo !== '/events' ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}` }, 'Нет аккаунта? Зарегистрироваться')),
       ),
     ),
   );

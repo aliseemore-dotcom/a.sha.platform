@@ -39,17 +39,42 @@ npm test       # правила внимания и критерии приём�
 | `PUBLIC_URL` | при `DEMO=0` | `http://localhost:3000` | для проверки `Origin` и для ссылок приглашений |
 | `NODE_ENV` | нет | `development` | только для лога при старте |
 | `BACKUP_S3_BUCKET` и другие `BACKUP_S3_*` | нет | — | см. «Резервные копии» — без них выгрузки во внешнее хранилище нет |
+| `RESEND_API_KEY` | нет | — | письмо со ссылкой для сброса пароля (см. «Регистрация и почта») |
+| `EMAIL_FROM` | нет | `A.MORE <onboarding@resend.dev>` | адрес отправителя писем |
 
-Первый запуск: создать пространство и владельца консольной командой, затем поднять сервер.
+Первый запуск — просто поднять сервер, регистрация открытая (см. ниже):
+
+```bash
+DEMO=0 DATABASE_PATH=./data/app.db PUBLIC_URL=https://your-domain npm start
+```
+
+Пространство и владельца также можно создать вручную консольной командой (например, для
+пространства, которое не должно проходить публичную форму):
 
 ```bash
 DATABASE_PATH=./data/app.db PUBLIC_URL=https://your-domain \
   npm run admin -- create-workspace --name "Агентство Лес" \
     --owner-email anna@example.com --owner-name "Анна" --time-zone Europe/Moscow
 # печатает одноразовую ссылку-приглашение — по ней владелец задаёт пароль
-
-DEMO=0 DATABASE_PATH=./data/app.db PUBLIC_URL=https://your-domain npm start
 ```
+
+### Регистрация и почта
+
+`/register` — открытая регистрация: посетитель указывает название компании, своё имя, email и
+пароль и сразу становится владельцем нового пространства (название компании — то, что показано
+в шапке приложения). Раньше пространства создавал только администратор консольной командой —
+это осознанно изменено, теперь так можно завести и себе, и любому другому агентству.
+
+Восстановление пароля (`/login` → «Забыли пароль?») отправляет ссылку на email через
+[Resend](https://resend.com) по обычному HTTP-запросу (без npm-зависимости, только `fetch`).
+Без `RESEND_API_KEY` письмо не уходит, но ответ пользователю всё равно одинаковый в обоих
+случаях (чтобы не раскрывать, зарегистрирован ли email) — то есть без ключа сброс пароля себе
+самостоятельно фактически недоступен, только через `npm run admin -- reset-link`.
+
+**Важно:** без верификации собственного домена в Resend их тестовый адрес
+(`onboarding@resend.dev`) доставляет письма только на email, которым зарегистрирован сам
+аккаунт Resend — остальным адресатам письма не придут. Для реальной рассылки всем пользователям
+нужно верифицировать домен на Resend и указать его в `EMAIL_FROM`.
 
 Готовый деплой на бесплатном хостинге с постоянным диском — см.
 [`FLY_DEPLOY.md`](FLY_DEPLOY.md) (Fly.io, `Dockerfile` и `fly.toml` уже в репозитории).
@@ -90,12 +115,13 @@ server/
   store/sqlite.js   хранилище на node:sqlite; пилот (DEMO=0)
   db/migrate.js     применение файлов миграций по порядку, с журналом schema_migrations
   db/migrations/    001_init.sql — вся схема пилота
-  auth/             пароли (scrypt), сессии, вход, ограничение попыток, приглашения
+  auth/             пароли (scrypt), сессии, вход, ограничение попыток, приглашения,
+                    register.js (открытая регистрация), passwordReset.js (сброс по email)
   workspace.js      настройки пространства (название, часовой пояс), экспорт данных
   team.js           «Команда»: приглашения, ссылки сброса, роли, права
   eventMembers.js   участники конкретной свадьбы
   backup.js         резервные копии по расписанию и по команде
-  mailer.js         точка расширения под будущую отправку писем — пока ничего не отправляет
+  mailer.js         отправка писем через Resend (сброс пароля) — без ключа молча не отправляет
   events.js         список, поиск, сортировка, пагинация, создание, архив, задача
   attention.js      правила «Требует внимания» и «В работе» (чистые функции)
   checklist.js      стартовый план свадьбы, детерминированные сроки, пересчёт при смене даты
@@ -108,7 +134,7 @@ web/
   images/covers/      база обложек проектов по умолчанию (web/js/ui/covers.js)
   styles/tokens.css   токены брендбука и @font-face
   styles/app.css      все страницы
-  js/views/           events, overview, tasks, budget, vendors, login, invite, team, workspaceSettings
+  js/views/           events, overview, tasks, budget, vendors, login, register, invite, team, workspaceSettings
   js/ui/               диалоги: новая свадьба, редактирование, участники, чек-лист, подрядчики
   js/breakpoints.js    общая точка «мобильный/шире» для лимитов списков
 test/                 node:test, включая контрактные тесты хранилища на обеих реализациях
@@ -126,6 +152,8 @@ POST /api/events/:id/tasks/:taskId/complete
 
 # вход и команда (docs/specs/08-foundation.md)
 POST   /api/session          { email, password } при DEMO=0, { userId } при DEMO=1
+POST   /api/register         { companyName, ownerName, email, password } — без сессии, недоступен при DEMO=1
+POST   /api/password-reset   { email } — без сессии, ответ всегда одинаковый
 GET    /api/invites/:token   проверка ссылки приглашения/сброса — без сессии
 POST   /api/invites/:token/accept   { name?, password } — без сессии
 GET    /api/workspace

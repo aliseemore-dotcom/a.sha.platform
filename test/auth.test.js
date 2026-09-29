@@ -10,6 +10,8 @@ import { createSession, resolveSession, revokeSession, revokeOtherSessions } fro
 import { isLoginLocked, recordFailedLogin } from '../server/auth/loginAttempts.js';
 import { attemptLogin, GENERIC_ERROR, LOCKED_ERROR } from '../server/auth/login.js';
 import { createInvite, inspectInvite, acceptInvite } from '../server/auth/invites.js';
+import { registerWorkspace } from '../server/auth/register.js';
+import { requestPasswordReset } from '../server/auth/passwordReset.js';
 import { isValidTimeZone } from '../server/time.js';
 import { listTeam, inviteMember, resetLinkFor, updateTeamMember } from '../server/team.js';
 import { getWorkspace, updateWorkspace, exportWorkspaceData } from '../server/workspace.js';
@@ -230,6 +232,84 @@ test('сброс пароля: принятие меняет пароль и о�
   assert.ok(result.ok);
   assert.equal(resolveSession(store, oldSession.token, NOW + 1000), null);
   assert.ok(verifyPassword('new-correct-horse', store.getUser(owner.id).passwordHash));
+});
+
+// ---------- регистрация ----------
+
+test('регистрация: создаёт пространство и владельца, логинит', () => {
+  const store = createMemoryStore();
+  const user = registerWorkspace(store, {
+    companyName: 'Агентство Лес', ownerName: 'Анна', email: 'anna@example.com',
+    password: 'correct-horse-battery',
+  }, '1.2.3.4', NOW);
+  assert.equal(user.role, 'owner');
+  const ws = store.getWorkspace(user.workspaceId);
+  assert.equal(ws.name, 'Агентство Лес');
+  assert.ok(verifyPassword('correct-horse-battery', user.passwordHash));
+});
+
+test('регистрация: занятый email — 422 на поле email', () => {
+  const store = createMemoryStore();
+  const workspaceId = makeWorkspace(store);
+  makeOwner(store, workspaceId, { email: 'taken@example.com' });
+  assert.throws(
+    () => registerWorkspace(store, {
+      companyName: 'Компания', ownerName: 'Иван', email: 'taken@example.com', password: 'correct-horse-battery',
+    }, '1.2.3.4', NOW),
+    (err) => err.status === 422 && err.fields.email === 'Этот email уже занят',
+  );
+});
+
+test('регистрация: пустые поля — 422 по каждому', () => {
+  const store = createMemoryStore();
+  assert.throws(
+    () => registerWorkspace(store, { companyName: '', ownerName: '', email: '', password: 'short' }, '1.2.3.4', NOW),
+    (err) => err.status === 422 && Boolean(err.fields.companyName && err.fields.ownerName && err.fields.email && err.fields.password),
+  );
+});
+
+test('регистрация: больше 5 попыток с одного IP в час — 429', () => {
+  const store = createMemoryStore();
+  for (let i = 0; i < 5; i++) {
+    registerWorkspace(store, {
+      companyName: `Компания ${i}`, ownerName: 'Иван', email: `ivan${i}@example.com`, password: 'correct-horse-battery',
+    }, '1.2.3.4', NOW + i);
+  }
+  assert.throws(
+    () => registerWorkspace(store, {
+      companyName: 'Ещё одна', ownerName: 'Иван', email: 'ivan-last@example.com', password: 'correct-horse-battery',
+    }, '1.2.3.4', NOW + 10),
+    (err) => err.status === 429,
+  );
+});
+
+// ---------- самостоятельный сброс пароля ----------
+
+test('сброс пароля по email: существующий пользователь получает токен', () => {
+  const store = createMemoryStore();
+  const workspaceId = makeWorkspace(store);
+  const owner = makeOwner(store, workspaceId);
+  const result = requestPasswordReset(store, owner.email, '1.2.3.4', NOW);
+  assert.ok(result);
+  assert.equal(result.email, owner.email);
+  const check = inspectInvite(store, result.token, NOW);
+  assert.ok(check.ok);
+  assert.equal(check.invite.kind, 'reset');
+});
+
+test('сброс пароля по email: несуществующий email — null, без утечки информации', () => {
+  const store = createMemoryStore();
+  const result = requestPasswordReset(store, 'nobody@example.com', '1.2.3.4', NOW);
+  assert.equal(result, null);
+});
+
+test('сброс пароля по email: больше 5 попыток на пару email+IP за 15 минут — null', () => {
+  const store = createMemoryStore();
+  const workspaceId = makeWorkspace(store);
+  const owner = makeOwner(store, workspaceId);
+  for (let i = 0; i < 5; i++) requestPasswordReset(store, owner.email, '1.2.3.4', NOW + i);
+  const result = requestPasswordReset(store, owner.email, '1.2.3.4', NOW + 10);
+  assert.equal(result, null);
 });
 
 // ---------- часовой пояс ----------

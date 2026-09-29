@@ -3,6 +3,7 @@
 import { h, clear } from './dom.js';
 import { api } from './api.js';
 import { renderLogin } from './views/login.js';
+import { renderRegister } from './views/register.js';
 import { renderEvents } from './views/events.js';
 import { renderOverview } from './views/overview.js';
 import { renderTaskList } from './views/taskList.js';
@@ -21,6 +22,7 @@ if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
 function match(pathname) {
   if (pathname === '/login') return { view: 'login' };
+  if (pathname === '/register') return { view: 'register' };
   const inviteMatch = pathname.match(/^\/invite\/([A-Za-z0-9_-]{1,80})$/);
   if (inviteMatch) return { view: 'invite', params: { token: inviteMatch[1] } };
   if (pathname === '/events') return { view: 'events' };
@@ -159,6 +161,13 @@ async function render() {
     clear(root);
     root.removeAttribute('aria-busy');
     cleanup = renderLogin(root, { navigate });
+    return;
+  }
+
+  if (route.view === 'register') {
+    clear(root);
+    root.removeAttribute('aria-busy');
+    cleanup = renderRegister(root);
     return;
   }
 
