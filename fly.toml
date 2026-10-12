@@ -13,7 +13,7 @@ primary_region = 'ams'
   DATABASE_PATH = '/data/app.db'
   DEMO = '0'
   NODE_ENV = 'production'
-  PUBLIC_URL = 'https://a-sha-platform.fly.dev'
+  PUBLIC_URL = 'https://amoreevent.ru'
 
 [[mounts]]
   source = 'data'
