@@ -298,10 +298,14 @@ a { color: inherit; }
    для содержимого внутри корневого узла приложения, поэтому подсветку и прокрутку делает JS. */
 .attention-row--flash .attention-row__link { background: var(--accent-tint); transition: background-color 1.2s ease; }
 
-/* Пояснение-ссылка «Ещё N задач(и) — в „Требует внимания“» — кнопка, оформленная как ссылка */
+/* Пояснение-ссылка «Ещё N задач(и) — в „Требует внимания“» — кнопка, оформленная как ссылка.
+   text-align/justify-self: left — иначе как прямой child грида (напр. .login-form) она
+   блокифицируется и получает обычное центрирование текста кнопки браузером, а соседние
+   текстовые ссылки (обычные <p>/<a>) остаются прижаты влево — визуально «едет» в сторону
+   (стр. «Вход»: «Забыли пароль?» и «Нет аккаунта? Зарегистрироваться» не на одной линии). */
 .link-button {
   display: inline; padding: 0; border: 0; background: none; font: inherit;
-  color: var(--ink-primary); cursor: pointer;
+  color: var(--ink-primary); cursor: pointer; text-align: left; justify-self: start;
   text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px;
   text-decoration-color: var(--line-control);
 }
